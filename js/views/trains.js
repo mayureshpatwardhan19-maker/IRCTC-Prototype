@@ -459,7 +459,7 @@
           paidTo: t('ps2.irctc', 'IRCTC (simulated gateway) via OneTrip'),
           refs: rtk ? [{ icon: 'train', label: t('ret.outLbl', 'Outward') + ' · ' + tk.no + ' ' + tk.name + ' · ' + tk.status, ref: 'PNR ' + tk.pnr },
             { icon: 'train', label: t('ret.retLbl', 'Return') + ' · ' + rtk.no + ' ' + rtk.name + ' · ' + rtk.status, ref: 'PNR ' + rtk.pnr },
-            { icon: 'checkCircle', label: t('ps2.bookingRef', 'OneTrip booking ref'), ref: ref + ' · ' + rtk.ref }]
+            { icon: 'checkCircle', label: t('ps2.bookingRef', 'OneTrip booking ref'), ref: ref }, { icon: 'checkCircle', label: t('ps2.bookingRef', 'OneTrip booking ref'), ref: rtk.ref }]
             : [{ icon: 'train', label: tk.no + ' ' + tk.name + ' · ' + tk.status, ref: 'PNR ' + tk.pnr }, { icon: 'checkCircle', label: t('ps2.bookingRef', 'OneTrip booking ref'), ref: ref }]
         });
         return tk;
