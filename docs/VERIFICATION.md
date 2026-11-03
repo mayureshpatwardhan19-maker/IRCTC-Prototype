@@ -1,3 +1,90 @@
+# IRCTC OneTrip: v1.2.1 builder notes (to be verified)
+
+Builder notes for the owner's two v1.2.1 requests, written by the builder on 3 Nov 2026. **Not yet independently verified.** The v1.2 verification report follows below unchanged.
+
+Already on this branch before this work: one-tap WhatsApp share (`js/views/itinerary.js`) and every persona phone set to +91 75898 02655 (`waSample` 7589802655).
+
+## v1.2.1-1. What changed
+
+**Request 1: auto-rickshaws and shared e-rickshaws are never booked.**
+- `#/transport`, the home "Local transport" tab and the journey Transport tab show auto and e-rickshaw with **no Book / Select / Add button**. Instead they show "≈ ₹X on meter" (e-rick: "≈ ₹20 per person") and a note: "No booking needed: take one from the prepaid auto booth outside {Station} station; pay the driver" (e-rick: "flag one down at the e-rickshaw stand outside {Station} station"). Cab, metro and bus keep **Book**. The Cheapest / Fastest / Best-for-group badges still consider autos, but an auto card never has a booking button.
+- `js/data/transport.js` no longer registers a catalogue item for auto / e-rick (`opt.meter = true`, `opt.note2`). The prepaid-booth autos in the catalogue (`C-CDG-03`, `C-MDU-01`, `C-PURI-01`, generated `C-<city>-2`) are flagged `mode:'auto', meter:true`. Their results cards show "≈ ₹X" and "I’ll take an auto" instead of "Add to journey"; packages never pick them.
+- Journey flow: "I’ll take an auto" stores a ride in **`journey.meterRides`** (`OT.meter` in `js/views/services.js`), never in `journey.items`. So it can never reach the cart total, the payment, a booking ref, Bookings & refunds, the partner dashboard or admin GTV. It shows in the plan, the timeline ("Pay on meter", ≈ ₹X, the note, Remove), the trip cost ("not charged here"), checkout (a note, no line), the one-page itinerary (A4, PNG, WhatsApp/email text) and readiness (a station transfer by auto counts in full, as there is nothing to book). One mode per leg: picking the cab drops the auto for that leg and vice versa.
+- Older saved data: an unpaid auto / e-rick in `journey.items` is moved to `meterRides` on boot, on My Journey and on checkout; checkout also filters meter items defensively. A paid legacy auto booking still renders (and stays cancellable, since money was taken).
+
+**Request 2: return trains, flight-style.**
+- Home Trains tab and `#/trains`: **One way | Round trip** segmented toggle (radio group, arrow keys). Round trip reveals a **Return date** (default departure + 2 days; must be ≥ departure, validated on both forms, past dates rejected).
+- Flow: outward list (`trip=round&ret=`, "step 1 of 2") → pick class → return list B → A on the return date (`step=ret&ono=&ocls=`, "step 2 of 2", outward choice shown with Change) → pick class → one passenger form → fare summary with **outward and return lines and the total** → confirm (lists both trains) → **one payment** → pop-up with **both PNRs** and both booking refs. Two train bookings (`leg: 'outward' | 'return'`, same `txn`, same `journeyId`); `journey.returnTrain` holds the return; hotel nights follow the return date. Hotel / cab / food / sightseeing planning then continues for the destination as before.
+- Voice and text (`OT.agents.parseCommand` + `splitReturn` in `js/agents/agents.js`): "… on Friday and back on Sunday", "return on 28 Nov", "round trip", "return ticket", Hinglish "aur Sunday ko wapas", Hindi "वापसी रविवार" / "… रविवार को वापस". The return weekday is counted from the outward date. The home "Understood" preview and the trains "I heard" panel show a **Return** chip, and the form flips to Round trip.
+- Booked one way: My Journey shows **"Add return train"** as the last timeline row (after hotel and cab), pre-filled B → A on the hotel check-out date (else trip end / arrival + nights), `attach=return`. The booked ticket attaches to the **same** journey (same id, outward PNR and items kept). For sample (IRCTC-imported) journeys the old "Link return PNR" stays next to it.
+- The return appears as the **last stop** on the railway timeline (with PNR and status), as a return ticket card under the outward ticket, in the trip cost, in checkout ("Paid, not charged again"), in **Bookings & refunds** with its own PNR and a "Return" label, **cancellable on its own** with the railway refund rule (cancelling it frees "Add return train" again and leaves the outward ticket), in the one-page itinerary (A4 return band, PNG band, "Return PNR" in WhatsApp/email text) and in admin live data (two train tickets).
+- Trip Readiness counts the return (CNF full, RAC/WL partial). New conflicts: return leaves before the outward arrival, and **return leaves before hotel check-out** (fix: "I’ll check out early").
+- Guided tour: the train-search step mentions the toggle; step 15 now only fixes the cloakroom; **new step 16 "Add the return train"** opens the pre-filled return search; **new step 17 "Return booked"** books it through the real flow (pax, confirm, pay) and lands on My Journey. 24 steps.
+- Hindi strings for every new text; ret.oneWay / ret.round / ret.date / tx.meterBadge / ret.add for the other 9 languages, the rest falls back to English.
+
+## v1.2.1-2. Files touched
+
+| File | Change |
+|---|---|
+| `js/data/transport.js` | auto / e-rick → `meter`, no catalogue item, `meterNote()`, `isMeter()` |
+| `js/data/travel.js`, `js/data/cities.js` | prepaid-booth autos flagged `mode:'auto', meter:true`, honest descriptions |
+| `js/data/personas.js` | packages never pick a meter auto |
+| `js/views/services.js` | `OT.meter` (rides, migrate), meter cards in the comparison, "I’ll take an auto", `OT.trip.add` refuses meter items |
+| `js/views/results.js` | meter catalogue cards, `addItem` routes meter items to `OT.meter`, one way per leg |
+| `js/views/checkout.js` | payable lines exclude meter items, meter note, return-train line |
+| `js/views/trains.js` | toggle + date pair (shared with home), round-trip steps, book/pay both, attach return, ticket shows the return |
+| `js/views/home.js`, `js/views/assistant.js` | toggle on the Trains tab, return from voice/text |
+| `js/views/journey.js` | meter rows, return card / cost, "Add return train", return conflicts, readiness label |
+| `js/views/bookings.js` | Outward / Return labels, cancelling the return only cancels the return |
+| `js/views/itinerary.js` | return PNR band (A4 + PNG), text, meter rows and note |
+| `js/agents/agents.js` | parser `splitReturn`, meter + return events, `liveReturn`, readiness, conflicts |
+| `js/tour.js` | 2 new steps, Round trip mention |
+| `js/core/i18n.js` | Hindi for all new strings + 5 core labels in 9 languages |
+| `js/app.js` | migrate older meter data on boot |
+| `css/traveller.css` | toggle, date pair, return cards, meter notes |
+| `tests/e2e.py` | new `v121` group; one v1.2 check now excludes meter modes from "bookable modes need a verified source" |
+
+## v1.2.1-3. Tests
+
+New group `v121` (`python3 tests/e2e.py --only v121`), at 1440 and 375, on file and http:
+- `#/transport` for New Delhi, Jaipur and Chandigarh: auto and e-rick have no Book button and show the ≈ meter fare and the booth / flag-down note; cab, bus and metro keep Book; Hindi wording; the home Local transport tab.
+- Journey flow: the catalogue prepaid auto has no "Add"; "I’ll take an auto" → `meterRides`, swaps with the cab per leg; timeline row, cost note, "To pay now" excludes it, readiness; checkout has no auto line; payment creates only the hotel booking; Bookings has nothing to cancel for it; the partner dashboard never sees it; the itinerary shows it but not in the total; legacy data with an unpaid auto + a paid old auto booking migrates and every page renders.
+- Round-trip UI: toggle, default return date, validation on home and `#/trains`, back to One way, Hindi labels.
+- Parser and voice: the three Friday/Sunday phrases (English, Hinglish, Hindi), "return on 28 Nov", no-return regression, the typed path opens `ret=Sunday` with a Return chip in "I heard", the simulated-ASR Hindi path.
+- Round-trip booking: return list B → A, both summaries, outward + return fare lines = total, one Pay, confirm lists both, pop-up with 2 PNRs, 2 bookings in one transaction, `journey.returnTrain`, the timeline ends with the return, readiness, planning continues, hotel check-out on the return day, return-before-checkout conflict + fix, A4 1 page, PNG, text, WhatsApp opens `wa.me/917589802655` with the return PNR, admin counts both tickets, independent cancellation with the railway refund.
+- Add return later: the pre-filled `attach=return` link after hotel and cab, same journey, own PNR, checkout line, itinerary print, persists after reload.
+
+
+## v1.2.1-4. Results (builder runs, 3 Nov 2026)
+
+| Run | Passed | Failed |
+|---|---|---|
+| `python3 tests/e2e.py --base file` (all groups, 1440 + 375) | 1868 | 0 |
+| `python3 tests/e2e.py --base http` (all groups, 1440 + 375; full 11-language route sweep) | 2237 | 0 |
+| of which `v121` | 249 per base (119 desktop + 130 mobile) | 0 |
+| of which the guided tour (now 24 steps, plus Exit mid-way) | 161 per base | 0 |
+
+0 console errors and 0 page errors in every group. New screens were screenshotted at 1440 and 375 and reviewed by eye (transport comparison, journey with an auto, home Round trip, return list, round-trip book page, two-PNR pop-up, round-trip journey, add-return journey). Two layout fixes came out of that review: the date pair now gets a full row when Round trip is on, and the pay button wraps instead of clipping.
+
+## v1.2.1-5. Known limitations and risks
+
+1. **Medium: a paid auto booking from an older version stays a normal, cancellable booking** (money was taken, so it must stay refundable). Only unpaid autos are migrated to pay-on-meter.
+2. **Medium: the parser handles one return phrase per sentence** in English, Hinglish, Hindi, Marathi ("परत") and Bengali ("ফিরে"). Other languages fall back to One way (the toggle still works by hand). A return date before the outward date is ignored (2 days later is used).
+3. **Low: a round trip charges the simulated convenience fee per ticket** (two PNRs), shown on the fare summary.
+4. **Low: hotel check-out for a round trip is the return date at the hotel's check-out time.** If the return leaves before that, the conflict is flagged; "I’ll check out early" marks it resolved but does not change the hotel booking.
+5. **Low: in the guided tour the return is booked in step 17 using the first bookable class.** If every class on that date were full (simulated REGRET), the step only shows My Journey.
+
+## v1.2.1-6. What the verifier should probe
+
+- `#/transport?city=NDLS`, `?city=JP`, `?city=CDG`: auto / e-rick cards have no Book or Select button, show "≈ ₹X on meter" / "≈ ₹20 per person", "No booking needed: take one from the prepaid auto booth outside … station; pay the driver".
+- `#/results?to=CDG` → Transport tab → "I’ll take an auto" → My Journey (Pay on meter row) → checkout (no auto line) → pay → Bookings (no auto) → Partner P-101 (no auto) → `#/itinerary-print` (auto row, not in total).
+- Home: type **"book from Chandigarh to Mumbai train on Friday and back on Sunday"**, then "Chandigarh se Mumbai train Friday ko aur Sunday ko wapas", "चंडीगढ़ से मुंबई ट्रेन शुक्रवार को, वापसी रविवार", "train from Delhi to Jaipur on 20 Nov, return on 28 Nov".
+- Round trip NDLS ⇄ CDG: outward → return → pax → one payment → pop-up with 2 PNRs → Bookings: cancel the return only, then the outward.
+- One-way booking + hotel → My Journey "Add return train" → book → same journey; reload.
+- Start demo: steps 16–17 (return), then checkout and the partner step.
+
+---
+
 # IRCTC OneTrip: Verification report (v1.2)
 
 Independent verification of v1.2 against the owner's six v1.2 requests, in the owner's own words, plus regressions of v1 and v1.1. Verified on 2 Nov 2026 by a separate agent that did not build v1.2. The v1.1 and v1 reports follow below as history.
