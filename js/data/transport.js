@@ -5,8 +5,12 @@
  * with total + per-person price, travel time, wait/frequency, comfort, luggage, door-to-door, last-mile walk,
  * CO2 estimate and availability at that time. Metro exists only in cities that really have one (list below,
  * real knowledge, Nov 2026); elsewhere the card says so honestly ("No metro in Chandigarh").
- * Each bookable mode is registered as a catalogue item (type 'cab', mode, leg:true) with a source,
+ * Each bookable mode (cab, metro, bus) is registered as a catalogue item (type 'cab', mode, leg:true) with a source,
  * providerSource and checkedAt, so the same Verification Agent, checkout, bookings and refunds apply.
+ * v1.2.1: auto-rickshaws and shared e-rickshaws run on the meter / are flagged down, so they are NEVER bookable:
+ * no catalogue item, no Book button, no cart line, no booking ref. They carry meter:true, an approximate fare
+ * ("≈ ₹270 on meter") and a "no booking needed" note. In the journey flow the traveller may mark "I'll take an
+ * auto": that is stored in journey.meterRides (see OT.meter), never in journey.items.
  *
  *   OT.data.transport.places(city)                      -> [{id, name, kind, km}]
  *   OT.data.transport.compare({city, from, to, date, time, pax, bags, persona})
@@ -134,7 +138,8 @@
       opt.co2g = Math.round(km * (d.basis === 'trip' && mode !== 'walk' ? d.co2 * opt.vehicles : d.co2 * pax));
       opt.door = d.door;
       opt.km = km;
-      if (opt.available && mode !== 'walk') opt.item = itemFor(city, a, b, mode, opt, legKey, pax);
+      if (mode === 'auto' || mode === 'erick') { opt.meter = true; opt.src = d.src; opt.note2 = meterNote(mode, a, cn); }
+      else if (opt.available && mode !== 'walk') opt.item = itemFor(city, a, b, mode, opt, legKey, pax);
       options.push(opt);
     });
     var av = options.filter(function (x) { return x.available; });
@@ -160,6 +165,15 @@
     if (heavy && x.luggage === 'no') s -= 25;
     s -= x.walkM / 100 * (heavy ? 3 : 0.5);
     return s;
+  }
+
+  /** "No booking needed" note for a meter mode: [i18n key, English, vars]. */
+  function meterNote(mode, a, cn) {
+    var at = a.kind === 'station' ? a.short : null;
+    if (mode === 'erick') return at ? ['tx.meterErick', 'No booking needed: flag one down at the e-rickshaw stand outside {place}; pay the driver.', { place: at }]
+      : ['tx.meterErickAny', 'No booking needed: flag one down on the road near {place}; pay the driver.', { place: a.short }];
+    return at ? ['tx.meterAuto', 'No booking needed: take one from the prepaid auto booth outside {place}; pay the driver.', { place: at }]
+      : ['tx.meterAutoAny', 'No booking needed: hail one near {place} or ask your hotel; pay the driver on the meter.', { place: a.short || cn }];
   }
 
   /* Bookable catalogue item for one (leg, mode), registered once (deterministic id). */
@@ -199,5 +213,10 @@
     return compare({ city: city, from: 'stn:' + city, to: hp, date: tr ? (tr.arrDate || tr.date) : null, time: t, pax: (j && j.passengers) || 2, persona: persona });
   }
 
-  OT.data.transport = { simulated: true, METRO: METRO, AIRPORT: AIRPORT, MODES: MODE_DEF, places: places, place: place, compare: compare, stationLeg: stationLeg, legKm: legKm };
+  /** Modes that are never booked online (meter / flag-down). */
+  var METER = { auto: 1, erick: 1 };
+  function isMeter(x) { return !!(x && (x.meter || METER[x.mode])); }
+
+  OT.data.transport = { simulated: true, METRO: METRO, AIRPORT: AIRPORT, MODES: MODE_DEF, places: places, place: place, compare: compare, stationLeg: stationLeg, legKm: legKm,
+    METER: METER, isMeter: isMeter, meterNote: meterNote };
 })();

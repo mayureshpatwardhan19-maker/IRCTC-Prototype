@@ -95,7 +95,7 @@
     });
     var arrTr = [
       ['cab', 'Station → hotel sedan transfer', city + ' City Cabs (sample)', r50(320 * f), 4.4, { fullUntilH: 1, thenPct: 0 }, { offsetMin: 15, durationMin: 25, vehicle: 'Sedan · 4 seats · boot space', meet: 'Waits at the main exit with a name board' }, 'Tracks your train: pickup moves if it runs late (sample rule).', 'आपकी ट्रेन ट्रैक करता है: देरी पर पिकअप आगे (सैंपल नियम)।'],
-      ['cab', 'Prepaid auto-rickshaw (station booth)', code + ' Prepaid Auto Booth (sample)', r50(140 * f) || 120, 3.9, { fullUntilH: 0, thenPct: 0 }, { offsetMin: 10, durationMin: 25, vehicle: 'Auto · 3 seats', meet: 'Prepaid booth outside the main exit' }, 'Fixed fare from the station booth, prepaid here (sample).', 'स्टेशन बूथ से तय किराया, यहीं प्रीपेड (सैंपल)।'],
+      ['cab', 'Prepaid auto-rickshaw (station booth)', code + ' Prepaid Auto Booth (sample)', r50(140 * f) || 120, 3.9, { fullUntilH: 0, thenPct: 0 }, { offsetMin: 10, durationMin: 25, vehicle: 'Auto · 3 seats', meet: 'Prepaid booth outside the main exit', mode: 'auto', meter: true }, 'Fixed fare from the station booth: pay at the booth or to the driver. No online booking (sample).', 'स्टेशन बूथ से तय किराया: बूथ पर या ड्राइवर को भुगतान करें। ऑनलाइन बुकिंग नहीं (सैंपल)।'],
       ['cab', 'Full-day city cab (8 h / 80 km)', city + ' City Cabs (sample)', r50(2000 * f), 4.4, { fullUntilH: 12, thenPct: 50 }, { slot: '09:30', day: 1, durationMin: 480, vehicle: 'Sedan · 4 seats', meet: 'Pickup from your hotel' }, 'The main sights of ' + city + ' in one day.', city + ' की मुख्य जगहें एक दिन में।']
     ];
     arrTr.forEach(function (c, i) {

@@ -147,7 +147,7 @@
     if (persona.kind === 'student') hotels = hotels.sort(function (a, b) { return a.price - b.price; });
     else hotels = hotels.sort(function (a, b) { return (a.id === 'H-CDG-01' ? -1 : 0) - (b.id === 'H-CDG-01' ? -1 : 0) || (b.rating - a.rating); });
     var hotel = hotels[0] || null;
-    var cab = items.filter(function (x) { return x.type === 'cab' && !x.leg && x.offsetMin != null && verdict(x) === 'verified'; })[0] || null;
+    var cab = items.filter(function (x) { return x.type === 'cab' && !x.leg && !x.meter && x.offsetMin != null && verdict(x) === 'verified'; })[0] || null;
     var sights = items.filter(function (x) { return x.type === 'sight' && !x.service && verdict(x) === 'verified' && !(x.tags.indexOf('gapFill') >= 0 && x.city === 'CDG'); });
     if (persona.kind === 'pilgrim') sights.sort(function (a, b) { return (b.tags.indexOf('temple') >= 0) - (a.tags.indexOf('temple') >= 0); });
     var sight = sights[0] || null;

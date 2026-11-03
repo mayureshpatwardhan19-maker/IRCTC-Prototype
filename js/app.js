@@ -19,6 +19,8 @@
     try { document.documentElement.lang = OT.i18n.lang(); } catch (e) { /* ignore */ }
     try { OT.shell.init(); } catch (e) { console.error('[OT] shell init failed', e); }
     try { if (OT.assistant) OT.assistant.init(); } catch (e) { console.error('[OT] assistant init failed', e); }
+    // v1.2.1: an unpaid auto / e-rickshaw saved by an older version becomes a pay-on-meter ride (never charged)
+    try { if (OT.meter) OT.meter.migrate(); } catch (e) { console.error('[OT] meter migrate failed', e); }
     if (!location.hash || location.hash === '#' || location.hash === '#/') {
       try { history.replaceState(null, '', '#/home'); } catch (e) { location.hash = '#/home'; }
     }

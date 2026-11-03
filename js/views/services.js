@@ -70,6 +70,7 @@
   function add(x, opts) {
     opts = opts || {};
     var j = OT.store.get('journey'); if (!j || !x) return null;
+    if (TX().isMeter(x)) { OT.toast(t('tx.noBookAuto', 'Autos and e-rickshaws are not booked online: pay the driver on the meter.'), 'info'); return null; }
     var v = OT.agents.verifyOne(x);
     if (v.verdict === 'unavailable') { OT.toast(t('res.cannotAdd', 'This option is unavailable at source.'), 'error'); return null; }
     var slot = opts.when ? { when: opts.when, endWhen: opts.endWhen } : OT.agents.slotFor(x, j);
@@ -105,6 +106,80 @@
     });
   }
   OT.trip = { ensure: ensure, add: add, book: book, title: tripTitle, newTrip: newTrip };
+
+  /* ================= pay-on-meter rides (v1.2.1) =================
+   * Auto-rickshaws and shared e-rickshaws are never booked: no cart line, no charge, no booking ref, nothing in
+   * Bookings & refunds or a partner dashboard. The traveller may still mark "I'll take an auto" in the journey flow;
+   * that lives in journey.meterRides = [{id, mode, legKey, refId?, city, title, approx, perPerson, pax, basis, minutes, when, endWhen, note}]
+   * and shows in the plan, timeline and one-page itinerary as "pay on meter, ≈ ₹X". */
+  var MODE_EN = { auto: ['tx.auto', 'Auto-rickshaw'], erick: ['tx.erick', 'E-rickshaw (shared)'] };
+  function meterApprox(r) {
+    if (!r) return '';
+    if (r.mode === 'erick') return t('tx.approxPP', '≈ {p} per person', { p: OT.inr(r.perPerson) });
+    if (r.basis === 'booth') return t('tx.approxBooth', '≈ {p} fixed fare at the booth', { p: OT.inr(r.approx) });
+    return t('tx.approxMeter', '≈ {p} on meter', { p: OT.inr(r.approx) });
+  }
+  function meterNoteText(r) { var n = r && r.note; return n ? t(n[0], n[1], n[2]) : t('tx.noBookingPay', 'No booking needed: pay the driver.'); }
+  function meterList(j) { j = j || OT.store.get('journey'); return (j && Array.isArray(j.meterRides)) ? j.meterRides.filter(function (r) { return r && r.mode; }) : []; }
+  function meterSave(fn) {
+    var j = OT.store.get('journey'); if (!j) return null;
+    j.meterRides = meterList(j);
+    var out = fn(j);
+    OT.store.set('journey', j);
+    return out;
+  }
+  function rideFromOption(cmp, o, j) {
+    j = j || OT.store.get('journey') || {};
+    var d0 = cmp.date || (j.train ? (j.train.arrDate || j.train.date) : (j.start || today()));
+    var when = d0 + 'T' + (cmp.time || '12:00');
+    var name = t(MODE_EN[o.mode][0], MODE_EN[o.mode][1]);
+    return { id: OT.uid('MTR'), mode: o.mode, legKey: cmp.legKey, city: cmp.city, title: name + ': ' + cmp.from.short + ' → ' + cmp.to.short, titleEn: (o.en || o.mode) + ': ' + cmp.from.short + ' → ' + cmp.to.short,
+      approx: o.total, perPerson: o.perPerson, pax: cmp.pax, basis: 'meter', minutes: o.minutes, km: o.km, when: when, endWhen: OT.agents.time.addMinIso(when, o.minutes || 15),
+      note: o.note2 || null, station: cmp.from.kind === 'station', addedAt: new Date().toISOString() };
+  }
+  function rideFromItem(x, j) {
+    j = j || OT.store.get('journey') || {};
+    var slot = j.train || j.kind === 'trip' ? OT.agents.slotFor(x, j) : {};
+    return { id: OT.uid('MTR'), mode: 'auto', legKey: 'cat:' + x.id, refId: x.id, city: x.city, title: x.name, titleEn: x.name, approx: x.price, perPerson: Math.round(x.price / Math.max(1, j.passengers || 1)),
+      pax: j.passengers || 1, basis: 'booth', minutes: x.durationMin || 15, when: slot.when || null, endWhen: slot.endWhen || (slot.when ? OT.agents.time.addMinIso(slot.when, x.durationMin || 15) : null),
+      note: ['tx.meterBooth', 'No booking needed: {meet}. Pay at the booth or to the driver.', { meet: x.meet || '' }], station: x.offsetMin != null, addedAt: new Date().toISOString() };
+  }
+  /** Mark a ride (replaces a planned mode for the same leg). Returns the ride. */
+  function meterAdd(ride) {
+    if (!ride) return null;
+    return meterSave(function (j) {
+      j.meterRides = j.meterRides.filter(function (r) { return r.legKey !== ride.legKey; });
+      // one way per leg: drop an unpaid cab/bus/metro planned for the same leg (paid bookings stay untouched)
+      j.items = (j.items || []).filter(function (i) { var y = D().get(i.refId); return !(i.status === 'selected' && y && y.legKey && y.legKey === ride.legKey); });
+      j.meterRides.push(ride);
+      return ride;
+    });
+  }
+  function meterRemove(id) { return meterSave(function (j) { j.meterRides = j.meterRides.filter(function (r) { return r.id !== id; }); return true; }); }
+  /** Drop the meter ride for a leg (called when a bookable mode is picked for that leg). */
+  function meterDropLeg(legKey) {
+    if (!legKey || !meterList().some(function (r) { return r.legKey === legKey; })) return;
+    meterSave(function (j) { j.meterRides = j.meterRides.filter(function (r) { return r.legKey !== legKey; }); });
+  }
+  /** Older saved data: a planned (unpaid) auto / e-rickshaw sitting in journey.items becomes a pay-on-meter ride. */
+  function meterMigrate() {
+    var j = OT.store.get('journey'); if (!j || !Array.isArray(j.items)) return false;
+    var moved = [];
+    j.items = j.items.filter(function (i) {
+      var x = i && i.status === 'selected' && D().get(i.refId);
+      if (!x || !TX().isMeter(x)) return true;
+      moved.push(x.leg ? { id: OT.uid('MTR'), mode: x.mode === 'erick' ? 'erick' : 'auto', legKey: x.legKey, city: x.city, title: i.title, titleEn: i.title, approx: x.basis === 'person' ? x.price * (i.pax || j.passengers || 1) : x.price,
+        perPerson: x.basis === 'person' ? x.price : Math.round(x.price / Math.max(1, j.passengers || 1)), pax: i.pax || j.passengers || 1, basis: 'meter', minutes: x.durationMin || 15, when: i.when || null, endWhen: i.endWhen || null, note: null, addedAt: i.addedAt }
+        : Object.assign(rideFromItem(x, j), { when: i.when || null }));
+      return false;
+    });
+    if (!moved.length) return false;
+    j.meterRides = meterList(j).concat(moved);
+    OT.store.set('journey', j);
+    return true;
+  }
+  OT.meter = { list: meterList, add: meterAdd, remove: meterRemove, dropLeg: meterDropLeg, fromOption: rideFromOption, fromItem: rideFromItem, approx: meterApprox, note: meterNoteText, migrate: meterMigrate,
+    total: function (j) { return meterList(j).reduce(function (s, r) { return s + (r.approx || 0); }, 0); } };
 
   /* ================= shared bits ================= */
   function cityPicker(id, code, label) { return OT.trains.picker(id, code, label || t('svc.city', 'City, area or station')); }
@@ -239,7 +314,8 @@
   /** Side-by-side comparison. opts.action: 'select' (journey) | 'book' (standalone). */
   function txHTML(cmp, opts) {
     opts = opts || {};
-    var sel = opts.selected || {};
+    var sel = opts.selected || {}, meterSel = {};
+    meterList().forEach(function (r) { if (r.legKey === cmp.legKey) meterSel[r.mode] = true; });
     return '<section class="tx-compare" data-tour="transport-compare" aria-label="' + OT.esc(t('tx.title', 'Compare local transport')) + '">' +
       '<div class="tx-head"><div><h2 class="h3">' + OT.icon('route', 18) + ' ' + OT.esc(opts.title || t('tx.title', 'Compare local transport')) + '</h2>' +
       '<p class="small muted">' + OT.lang.highlight(t('tx.leg', '{from} → {to} · {km} km · {n} traveller(s) · {time}', { from: cmp.from.short, to: cmp.to.short, km: cmp.km, n: cmp.pax, time: cmp.time })) + '</p></div>' + OT.simTag() + '</div>' +
@@ -249,7 +325,9 @@
         return '<article class="tx-card' + (o.available ? '' : ' is-off') + (chosen ? ' is-on' : '') + '" data-mode="' + o.mode + '"' + (o.item ? ' data-ref="' + o.item.id + '"' : '') + '>' +
           '<div class="tx-top"><span class="tx-ic">' + OT.icon(o.icon, 20) + '</span><strong>' + OT.esc(label) + '</strong></div>' +
           '<div class="tx-badges">' + (o.badges || []).map(function (b) { return '<span class="badge ' + BADGE[b][2] + '" data-badge="' + b + '">' + OT.esc(t(BADGE[b][0], BADGE[b][1])) + '</span>'; }).join('') + '</div>' +
-          (o.available ? '<div class="tx-price"><bdi class="keep">' + OT.esc(o.total ? OT.inr(o.total) : t('res.free', 'Free')) + '</bdi><span class="xs muted">' + OT.esc(o.total ? t('tx.perPerson', '{p} per person · total for {n}', { p: OT.inr(o.perPerson), n: cmp.pax }) : t('tx.noTicket', 'No ticket needed')) + '</span></div>' +
+          (o.available ? (o.meter ? '<div class="tx-price tx-price-meter"><bdi class="keep">' + OT.esc(o.mode === 'erick' ? t('tx.approxPP', '≈ {p} per person', { p: OT.inr(o.perPerson) }) : t('tx.approxMeter', '≈ {p} on meter', { p: OT.inr(o.total) })) + '</bdi><span class="xs muted">' +
+              OT.esc(o.mode === 'erick' ? t('tx.approxTotal', 'about {p} for {n}, paid to the driver', { p: OT.inr(o.total), n: cmp.pax }) : o.vehicles > 1 ? t('tx.approxAutos', '{v} autos · paid to the driver', { v: o.vehicles }) : t('tx.payDriver', 'paid to the driver')) + '</span></div>'
+            : '<div class="tx-price"><bdi class="keep">' + OT.esc(o.total ? OT.inr(o.total) : t('res.free', 'Free')) + '</bdi><span class="xs muted">' + OT.esc(o.total ? t('tx.perPerson', '{p} per person · total for {n}', { p: OT.inr(o.perPerson), n: cmp.pax }) : t('tx.noTicket', 'No ticket needed')) + '</span></div>') +
             '<dl class="tx-facts xs">' +
             '<div><dt>' + OT.esc(t('tx.time', 'Travel time')) + '</dt><dd><bdi>' + o.minutes + '</bdi> ' + OT.esc(t('time.min', 'min')) + (o.waitMin ? ' <span class="muted">+' + o.waitMin + ' ' + OT.esc(t('tx.wait', 'wait')) + '</span>' : '') + '</dd></div>' +
             '<div><dt>' + OT.esc(t('tx.freq', 'Frequency')) + '</dt><dd>' + OT.esc(o.freq ? t('tx.every', 'every {n} min', { n: o.freq }) : o.mode === 'walk' ? '—' : t('tx.onDemand', 'On demand')) + '</dd></div>' +
@@ -257,10 +335,15 @@
             '<div><dt>' + OT.esc(t('tx.luggage', 'Luggage')) + '</dt><dd>' + OT.esc(t(LUG[o.luggage][0], LUG[o.luggage][1])) + '</dd></div>' +
             '<div><dt>' + OT.esc(t('tx.door', 'Door-to-door')) + '</dt><dd>' + OT.esc(o.door ? t('common.yes', 'Yes') : t('tx.walkM', 'No · {m} m walk', { m: o.walkM })) + '</dd></div>' +
             '<div><dt>CO₂</dt><dd>' + OT.esc(co2(o.co2g)) + '</dd></div></dl>' +
-            (v ? '<div class="tx-ver">' + OT.badge(v.verdict) + '<span class="xs muted">' + OT.esc(o.item.source.name) + ' · ' + OT.esc(t('res.checked', 'checked')) + ' ' + OT.esc(OT.stamp(new Date(v.sourceCheckedAt)).replace(/^\d+ \w+ \d+, /, '')) + '</span></div>' : '<div class="tx-ver"><span class="xs muted">' + OT.esc(t('tx.walkSrc', 'Map distance (simulated)')) + '</span></div>') +
+            (o.meter ? '<div class="tx-ver"><span class="badge b-info">' + OT.icon('info', 12) + '<span>' + OT.esc(t('tx.meterBadge', 'Pay on meter')) + '</span></span><span class="xs muted">' + OT.esc(o.src || '') + '</span></div>' : '') +
+            (o.meter ? '' : v ? '<div class="tx-ver">' + OT.badge(v.verdict) + '<span class="xs muted">' + OT.esc(o.item.source.name) + ' · ' + OT.esc(t('res.checked', 'checked')) + ' ' + OT.esc(OT.stamp(new Date(v.sourceCheckedAt)).replace(/^\d+ \w+ \d+, /, '')) + '</span></div>' : '<div class="tx-ver"><span class="xs muted">' + OT.esc(t('tx.walkSrc', 'Map distance (simulated)')) + '</span></div>') +
+            (o.meter ? '<p class="tx-meter xs" data-meter-note>' + OT.icon('info', 13) + ' <span>' + OT.esc(t(o.note2[0], o.note2[1], o.note2[2])) + '</span></p><div class="tx-act">' +
+              (opts.action === 'select' ? (meterSel[o.mode] ? '<button type="button" class="btn btn-ghost btn-sm added" data-tx-meter="' + o.mode + '" disabled>' + OT.icon('check', 14) + OT.esc(t('tx.meterPlanned', 'In your plan · pay on meter')) + '</button>'
+                : '<button type="button" class="btn btn-ghost btn-sm" data-tx-meter="' + o.mode + '">' + OT.esc(o.mode === 'erick' ? t('tx.takeErick', 'I’ll take an e-rickshaw') : t('tx.takeAuto', 'I’ll take an auto')) + '</button>')
+                : '<span class="xs muted">' + OT.esc(t('tx.noBooking', 'No booking needed')) + '</span>') + '</div>' :
             '<div class="tx-act">' + (o.item ? (chosen ? '<button type="button" class="btn btn-ghost btn-sm added" data-tx-pick="' + o.item.id + '" disabled>' + OT.icon('check', 14) + OT.esc(t('tx.selected', 'Selected')) + '</button>'
               : '<button type="button" class="btn ' + (o.badges && o.badges.indexOf('group') >= 0 ? 'btn-primary' : 'btn-ghost') + ' btn-sm" data-tx-pick="' + o.item.id + '">' + OT.esc(opts.action === 'book' ? t('tx.book', 'Book') : t('tx.select', 'Select')) + '</button>')
-              : '<span class="xs muted">' + OT.esc(t('tx.noBooking', 'No booking needed')) + '</span>') + '</div>'
+              : '<span class="xs muted">' + OT.esc(t('tx.noBooking', 'No booking needed')) + '</span>') + '</div>')
             : '<p class="tx-off small">' + OT.icon('info', 14) + ' ' + OT.lang.highlight(t(o.reason[0], o.reason[1], o.reason[2])) + '</p>') +
           '</article>';
       }).join('') + '</div>' +
@@ -271,6 +354,15 @@
       b.addEventListener('click', function () {
         var id = b.getAttribute('data-tx-pick'), o = cmp.options.filter(function (x) { return x.item && x.item.id === id; })[0];
         if (o) onPick(o);
+      });
+    });
+    OT.$$('[data-tx-meter]', scope).forEach(function (b) {
+      b.addEventListener('click', function () {
+        var o = cmp.options.filter(function (x) { return x.mode === b.getAttribute('data-tx-meter'); })[0];
+        if (!o || !OT.store.get('journey')) return;
+        var r = meterAdd(rideFromOption(cmp, o));
+        OT.toast(t('tx.meterAdded', '{name} added to your plan: {approx}, pay the driver. Nothing is charged here.', { name: r.title, approx: meterApprox(r) }), 'success');
+        if (onPick.meter) onPick.meter(r); else if (root) OT.router.render();
       });
     });
   }

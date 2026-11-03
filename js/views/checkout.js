@@ -16,8 +16,12 @@
   };
   function code5() { var c = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', s = ''; for (var i = 0; i < 5; i++) s += c.charAt(Math.floor(Math.random() * c.length)); return s; }
 
+  /** v1.2.1: autos / e-rickshaws are paid on the meter, never charged here (defensive: older saved data). */
+  function payable(i) { return i.status === 'selected' && !(OT.data.transport && OT.data.transport.isMeter(D().get(i.refId))); }
   function lines(j) {
-    return (j.items || []).filter(function (i) { return i.status === 'selected'; }).map(function (i) {
+    if (OT.meter) OT.meter.migrate();
+    j = OT.store.get('journey') || j;
+    return (j.items || []).filter(payable).map(function (i) {
       var x = D().get(i.refId) || {}, l = OT.agents.lineFor(i, j);
       var v = OT.agents.verifyOne(x) || { verdict: i.verification, flags: [] };
       var priceIssue = i.price !== i.listedPrice && !i.priceAccepted;
@@ -58,7 +62,13 @@
       '<span class="xs muted">' + keep(j.train.from) + ' ' + keep(j.train.dep) + ' → ' + keep(j.train.to) + ' ' + keep(j.train.arr) + ' · ' + keep(OT.fmtDate(j.train.date)) + '</span></div>' +
       (j.train.status === 'PLANNED' ? '<div class="co-amt">' + OT.badge('pending', t('trip.notBooked', 'Not booked yet')) + '<a class="xs" href="#/' + OT.trains.path({ from: j.train.from, to: j.train.to, date: j.train.date, pax: j.passengers }) + '">' + OT.esc(t('trip.bookNow', 'Book this train')) + '</a></div></div>' :
       '<div class="co-amt"><span>' + keep(OT.inr(j.train.fare)) + '</span>' + OT.badge('confirmed', t('co.paidIrctc', 'Paid on IRCTC')) + '<span class="xs muted">' + OT.esc(t('co.notCharged', 'Not charged again')) + '</span></div></div>')) +
+      (OT.agents.liveReturn(j) ? (function (r) {
+        return '<div class="co-ticket small" data-co-return>' + OT.icon('train', 18) + '<div><strong>' + OT.esc(t('ret.title', 'Return train')) + ' ' + keep(r.no) + ' · PNR ' + keep(r.pnr) + '</strong>' +
+          '<span class="xs muted">' + keep(r.from) + ' ' + keep(r.dep) + ' → ' + keep(r.to) + ' ' + keep(r.arr) + ' · ' + keep(OT.fmtDate(r.date)) + '</span></div>' +
+          '<div class="co-amt">' + (r.fare ? '<span>' + keep(OT.inr(r.fare)) + '</span>' : '') + OT.badge('confirmed', r.bookedViaOneTrip ? t('ret.paidAlready', 'Paid') : t('co.paidIrctc', 'Paid on IRCTC')) + '<span class="xs muted">' + OT.esc(t('co.notCharged', 'Not charged again')) + '</span></div></div>';
+      })(OT.agents.liveReturn(j)) : '') +
       '<ul class="co-lines">' + rows.map(function (r) { return lineHTML(r, j); }).join('') + '</ul>' +
+      (OT.meter && OT.meter.list(j).length ? '<p class="xs muted co-meter" data-co-meter>' + OT.icon('info', 12) + ' ' + OT.esc(t('co.meterNote', '{n} auto / e-rickshaw ride(s) in your plan (about {p}) are paid to the driver on the meter: not booked, not charged here.', { n: OT.meter.list(j).length, p: OT.inr(OT.meter.total(j)) })) + '</p>' : '') +
       '<div class="co-totals small">' +
       '<div><span>' + OT.esc(t('co.subtotal', 'OneTrip services')) + '</span>' + keep(OT.inr(total)) + '</div>' +
       '<div class="muted"><span>' + OT.esc(t('co.ofGst', 'of which GST (simulated breakdown)')) + '</span>' + keep(OT.inr(gst)) + '</div>' +
@@ -128,7 +138,7 @@
         var created = [];
         OT.store.update('journey', function (jj) {
           jj.items.forEach(function (i) {
-            if (i.status !== 'selected') return;
+            if (!payable(i)) return;
             var x = D().get(i.refId) || {}, l = OT.agents.lineFor(i, jj);
             var ref = 'OT-' + (x.mode ? 'LTR' : PREFIX[i.type] || 'SVC') + '-' + code5();
             i.status = 'confirmed'; i.bookingRef = ref; i.verification = 'verified'; i.paidAt = now;

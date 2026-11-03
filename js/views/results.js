@@ -86,7 +86,9 @@
   function cardHTML(v, run, opts) {
     opts = opts || {};
     var x = v.item, added = opts.standalone ? opts.added : inJourney(x.id);
-    var priceChanged = v.livePrice !== x.price;
+    var meter = OT.data.transport && OT.data.transport.isMeter(x);
+    var meterOn = meter && OT.meter && OT.meter.list().some(function (r) { return r.refId === x.id; });
+    var priceChanged = !meter && v.livePrice !== x.price;
     var labels = [];
     labels.push(x.managed === 'irctc' ? '<span class="lbl lbl-irctc">' + OT.esc(t('res.irctc', 'IRCTC-managed')) + '</span>' : '<span class="lbl">' + OT.esc(t('res.partner', 'Partner offer')) + '</span>');
     if (x.sponsored) labels.push('<span class="lbl lbl-spon">' + OT.esc(t('res.sponsored', 'Sponsored')) + '</span>');
@@ -104,8 +106,9 @@
       '<div class="offer-top">' +
       '<span class="offer-ic">' + OT.icon(OT.itemIcon(x), 22) + '</span>' +
       '<div class="offer-title"><h3>' + OT.esc(x.name) + '</h3><div class="offer-prov small">' + OT.esc(x.provider) + ' ' + labels.join(' ') + '</div></div>' +
+      (meter ? '<div class="offer-price"><div class="price"><bdi class="keep">≈ ' + OT.esc(OT.inr(v.livePrice)) + '</bdi></div><div class="xs muted">' + OT.esc(t('tx.boothFare', 'fixed fare at the booth · no online booking')) + '</div>' + OT.simTag() + '</div>' :
       '<div class="offer-price"><div class="price"><bdi class="keep">' + OT.esc(x.price === 0 && v.livePrice === 0 ? t('res.free', 'Free') : OT.inr(v.livePrice)) + '</bdi></div>' +
-      '<div class="xs muted">' + OT.esc(basisLabel(x.basis)) + ' · ' + OT.esc(t('res.inclTax', 'incl. GST')) + '</div>' + OT.simTag() + '</div>' +
+      '<div class="xs muted">' + OT.esc(basisLabel(x.basis)) + ' · ' + OT.esc(t('res.inclTax', 'incl. GST')) + '</div>' + OT.simTag() + '</div>') +
       '</div>' +
       '<div class="offer-badges">' + OT.badge(v.verdict) + (v.top ? '<span class="badge b-top">' + OT.icon('target', 12) + '<span>' + OT.esc(t('res.topPick', 'Top verified pick')) + '</span></span>' : '') +
       (v.lifted ? '<span class="xs muted">' + OT.esc(t('res.lifted', 'Sponsored: moved up one slot (max allowed)')) + '</span>' : '') + '</div>' +
@@ -114,13 +117,18 @@
       '<p class="offer-desc small" lang="' + (x.desc && x.desc[L()] ? L() : 'en') + '">' + OT.lang.highlight(descOf(x)) + '</p>' +
       '<ul class="offer-facts small">' + facts.join('') + '</ul>' +
       (v.reasons && v.reasons.length ? '<div class="why"><span class="xs muted">' + OT.esc(t('res.why', 'Why this?')) + '</span>' + v.reasons.map(function (r) { return '<span class="why-chip">' + line(r) + '</span>'; }).join('') + '</div>' : '') +
+      (meter ? '<p class="note small tx-meter" data-meter-note>' + OT.icon('info', 14) + ' <span>' + OT.esc(t('tx.meterBooth', 'No booking needed: {meet}. Pay at the booth or to the driver.', { meet: x.meet || '' })) + '</span></p>' :
       '<div class="policy small">' + OT.icon('refund', 14) + ' <span>' + OT.lang.highlight(OT.agents.policyText(x.policy)) + '</span>' +
       (L() !== 'en' ? ' <span class="xs muted">(' + OT.esc(t('res.policyVerified', 'reviewed translation')) + ')</span>' : '') + '</div>' +
-      compareHTML(v) +
+      compareHTML(v)) +
       verifLog(v) +
       '<div class="source-line">' + OT.icon('info', 12) + '<span>' + OT.esc(t('res.source', 'Source')) + ': ' + OT.esc(x.source.name) + '</span><span><bdi class="keep">' + OT.esc(x.source.ref) + '</bdi></span>' +
       '<span>' + OT.esc(t('res.checked', 'checked')) + ' ' + OT.esc(OT.stamp(new Date(v.sourceCheckedAt))) + ' (' + OT.esc(OT.agents.time.agoLabel(v.sourceCheckedAt)) + ')</span></div>' +
-      (opts.standalone ? '<div class="offer-actions">' +
+      (meter ? '<div class="offer-actions">' + (opts.standalone ? '<span class="badge b-info">' + OT.icon('info', 12) + '<span>' + OT.esc(t('tx.meterBadge', 'Pay on meter')) + '</span></span>' :
+        meterOn ? '<button type="button" class="btn btn-ghost btn-sm added" data-meter-off="' + x.id + '">' + OT.icon('check', 15) + OT.esc(t('tx.meterPlanned', 'In your plan · pay on meter')) + ' · ' + OT.esc(t('common.remove', 'Remove')) + '</button>'
+          : '<button type="button" class="btn btn-ghost btn-sm" data-meter-ref="' + x.id + '">' + OT.esc(t('tx.takeAuto', 'I’ll take an auto')) + '</button>') +
+        (opts.standalone ? '' : '<button type="button" class="btn btn-link small" data-dismiss="' + x.id + '">' + OT.esc(t('res.dismiss', 'Not for me')) + '</button>') + '</div></article>' :
+      opts.standalone ? '<div class="offer-actions">' +
         '<button type="button" class="btn btn-accent btn-sm" data-book-now="' + x.id + '">' + OT.icon('wallet', 15) + OT.esc(t('svc.bookNow', 'Book now')) + '</button>' +
         (added ? '<span class="badge b-ok">' + OT.icon('check', 12) + '<span>' + OT.esc(t('svc.inTrip', 'In your trip')) + '</span></span>' : '<button type="button" class="btn btn-ghost btn-sm" data-add-trip="' + x.id + '">' + OT.icon('plus', 15) + OT.esc(t('svc.addTrip', 'Add to trip')) + '</button>') + '</div></article>' :
       '<div class="offer-actions">' +
@@ -212,10 +220,17 @@
     var run = OT.state.lastRun, x = D().get(refId);
     var j = OT.store.get('journey');
     if (!x || !j) return null;
+    if (OT.data.transport.isMeter(x)) {   // v1.2.1: autos are never booked; mark "I'll take an auto" instead (pay on meter)
+      var r = OT.meter.add(OT.meter.fromItem(x, j));
+      if (!opts.quiet) OT.toast(t('tx.meterAdded', '{name} added to your plan: {approx}, pay the driver. Nothing is charged here.', { name: r.title, approx: OT.meter.approx(r) }), 'success');
+      refresh();
+      return null;
+    }
     var v = OT.agents.verifyOne(x);
     if (v.verdict === 'unavailable') { OT.toast(t('res.cannotAdd', 'This option is unavailable at source.'), 'error'); return null; }
     var slot = OT.agents.slotFor(x, j);
     var replaced = null;
+    if (x.legKey && OT.meter) { var mr = OT.meter.list(j).filter(function (m) { return m.legKey === x.legKey; })[0]; if (mr) { replaced = mr.title; OT.meter.dropLeg(x.legKey); j = OT.store.get('journey'); } }
     j.items = j.items || [];
     if (x.type === 'hotel') {
       j.items = j.items.filter(function (i) {
@@ -297,7 +312,15 @@
         });
       });
     });
-    if (lastLeg && OT.transportUI) OT.transportUI.bind(main, lastLeg, function (o) { addItem(o.item.id); });
+    if (lastLeg && OT.transportUI) { var pick = function (o) { addItem(o.item.id); }; pick.meter = function () { refresh(); }; OT.transportUI.bind(main, lastLeg, pick); }
+    OT.$$('[data-meter-ref]', main).forEach(function (b) { b.addEventListener('click', function () { addItem(b.getAttribute('data-meter-ref')); }); });
+    OT.$$('[data-meter-off]', main).forEach(function (b) {
+      b.addEventListener('click', function () {
+        var r = OT.meter.list().filter(function (m) { return m.refId === b.getAttribute('data-meter-off'); })[0];
+        if (r) OT.meter.remove(r.id);
+        refresh();
+      });
+    });
     var sp = root.querySelector('#speak-sum');
     if (sp) sp.addEventListener('click', function () { OT.lang.speak(OT.agents.summarize(OT.state.lastRun, L()), L()); });
   }
