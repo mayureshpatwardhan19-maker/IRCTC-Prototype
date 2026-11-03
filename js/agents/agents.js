@@ -806,7 +806,8 @@
       var base = out.date || ymdOf(new Date(Date.now() + 86400000));
       var rd = sr.ret ? parseDate(sr.ret.replace(/\s+/g, ' ').trim(), base) : null;
       out.round = true;
-      if (rd && rd < base) { out.retBad = rd; rd = null; }
+      // a return before the outward date, or one that only parsed by rolling into next year ("20 Nov … return on 2 Nov"), is ignored
+      if (rd && (rd < base || Date.parse(rd) - Date.parse(base) > 180 * 86400000)) { out.retBad = rd; rd = null; }
       out.ret = rd;
     }
     if (out.intent === 'train') {

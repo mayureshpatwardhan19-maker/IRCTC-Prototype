@@ -1,3 +1,83 @@
+# IRCTC OneTrip: v1.2.1 independent verification
+
+Independent verification of v1.2.1 against the owner's three v1.2.1 requests, written on 3 Nov 2026 by a separate agent that did not build v1.2.1. Every claim in the builder notes below was re-checked with the verifier's own Playwright scripts (real clicks, 1440×900 and 375×812, file:// and http), not with the builder's tests. The builder notes and the v1.2 report follow unchanged.
+
+**Result (v1.2.1):** after the 5 fixes in section v1.2.1-V3, `python3 tests/e2e.py --base file` passes **1914 checks with 0 failures** and `--base http` passes **2283 checks with 0 failures** (both at 1440×900 and 375×812, 0 console errors, 0 page errors; http includes the full 11-language route sweep). The verifier's new group `verify v1.2.1` (`--only verify121`) is part of both runs and fails on the builder's code (8 failures) before the fixes.
+
+## v1.2.1-V1. Traceability: owner request → evidence
+
+| ID | The owner asked for | Verdict | Evidence (verifier's own probes + tests) |
+|---|---|---|---|
+| A | Autos run on the meter / are caught at the station: **no booking option**, only an approximate amount and "get it from the station" (builder also applied this to shared e-rickshaws); cab, metro and bus keep Book | **Pass** (after fixes #1, #2) | `#/transport?city=NDLS`, `JP`, `CDG`, the home "Local transport" tab and the journey Transport tab: auto and e-rick cards have **no button at all** on `#/transport`, show "≈ ₹30 on meter" / "≈ ₹20 per person" and "No booking needed: take one from the prepaid auto booth outside {city} station; pay the driver" / "flag one down at the e-rickshaw stand outside …". Cab, bus and metro (NDLS → airport) keep **Book** and booking them works (checkout → pay → confirmed). Journey: "I’ll take an auto" → My Journey row "Pay on meter, ≈ ₹30" with Remove (Remove works) → checkout has no auto line → payment ₹5,300 = hotel only (with a cab: ₹5,300 + ₹350 = ₹5,650, pop-up amount = sum of bookings) → no auto in booking refs, Bookings & refunds, Partner P-101 or Admin live data / GTV → the itinerary (A4, 1 page; PNG; WhatsApp text) shows the auto as "Pay on meter" and "not included in the total". Cab replaces auto and auto replaces cab for the same leg, **including the catalogue booth auto and the station cab** (fix #1). Older v1.2 data with unpaid autos/e-ricks migrates without errors (V2 item 8). |
+| B | All persona mobiles = 7589802655; WhatsApp after payment opens **wa.me directly** for the signed-in user's number with the itinerary typed, no prompt when the profile has a number; a **clean** prompt when it has to ask | **Pass** | Signed in from the visible `#/login` page as Sunita, Ramesh, Arjun and Neha in turn: phone "+91 75898 02655"; after a train payment the pop-up WhatsApp button calls `window.open('https://wa.me/917589802655?text=…')` with the itinerary text containing the PNR, and no modal opens (both widths, both bases). Partner and Admin personas: "+91 75898 02655". Signed out: a clean prompt (+91 prefix, placeholder "98765 43210", save-to-profile tick, DPDP line); "98765 43210" opens `wa.me/919876543210`, the next click opens directly, **Change number** re-prompts and "+91 70000 12345" is used, "12345" shows "Enter a 10-digit Indian mobile number." Email from the pop-up opens **above** it (topmost element is the email dialog). A stale v1.2 profile (old masked phone) still resolves to 7589802655. |
+| C | Return train, flight-style **One way \| Round trip**; after A → B (and other services) also book B → A | **Pass** (after fixes #3, #4) | Home and `#/trains`: toggle, Return date (default +2/+3 days), return-before-departure, past departure and past return all rejected on both forms. NDLS ⇄ CDG: "step 1 of 2" → "step 2 of 2" (CDG → NDLS on the return date, outward shown with Change) → one passenger form → fare summary outward ₹1,850 + return ₹1,850 = ₹3,700 (12012 now priced like 12011, fix #4) → confirm lists both trains → **one** payment → pop-up with **both PNRs**, each on its own row, inside the 375 px screen → Bookings shows Outward / Return; cancelling the return alone shows the railway refund and brings "Add return train" back; the outward then cancels on its own. One way + hotel + auto → My Journey "Add return train" (CDG → NDLS on the check-out date, `attach=return`) → book → same journey id, return is the last timeline stop, persists after reload, in the A4 itinerary (1 page) with its PNR; check-out 11:00 vs 12:15 return correctly raises no conflict. Voice and text (typed **and** the mic with a fake recogniser) for the four owner phrases give the right dates against the browser's real date (Tue 3 Nov 2026 → Fri 6 Nov / Sun 8 Nov; 20 Nov / 28 Nov), the Return chip and Round trip on; "book from Chandigarh to Mumbai train" stays one way (tomorrow). |
+| REG | Guided tour, every route in 11 languages, no regressions | **Pass** (after fix #5) | "Start demo" with only Next: all 24 steps on desktop and phone, file and http, 0 errors; step 16 opens the pre-filled return search, step 17 books it (6 bookings at the end, no auto). Full suites below. |
+
+## v1.2.1-V2. Verifier results per item
+
+| # | Item | Result | Notes |
+|---|---|---|---|
+| 1 | `#/transport` NDLS / JP / CDG, home Local transport tab, journey Transport tab | PASS | Every card checked in 3 cities × 2 widths × 2 bases; metro and bus booked from `#/transport` (NDLS → airport). |
+| 2 | Auto through journey, checkout, pay, refs, Bookings, partner, admin, itinerary; one mode per leg; arithmetic | PASS after fix #1 | Totals: ₹5,300 + ₹350 = ₹5,650 paid = pop-up = confirm dialog; itinerary "Total paid" ₹8,270 = outward ₹1,850 + hotel ₹5,300 + return ₹1,120 (fares before fix #4); the ≈ ₹30 auto is shown separately and never added. |
+| 3 | Four owner phrases, typed and voice; v1.1 one-way phrase | PASS | 5 phrases × typed/mic × 2 widths × 2 bases; edge phrases probed (see limitation 2). |
+| 4 | Round trip NDLS ⇄ CDG via the UI | PASS after fix #4 | Validation, steps, fare = total, one payment, 2 PNRs readable on a phone, Outward/Return, cancel return then outward. |
+| 5 | One way + hotel → Add return train → book → reload | PASS | Same journey, last stop, itinerary, persists. |
+| 6 | WhatsApp per persona, signed-out prompt, Change number, email over pop-up, partner/admin phones | PASS | Now also a permanent test (`verify v1.2.1`). |
+| 7 | Start demo, Next only | PASS | 24/24 steps, desktop and phone. |
+| 8 | v1.2 localStorage with unpaid autos (generated by running the v1.2 `main` code: paid auto booking, unpaid e-rick, unpaid booth auto) | PASS | Migrated to 2 pay-on-meter rides; paid auto stays a cancellable booking; 11 routes render on both bases and widths with no errors. |
+| 9 | Routes × 11 languages, no NaN/undefined/placeholders/mojibake, no 375 overflow; Hindi for new strings | PASS after fix #2 | Hindi has all 120 new keys; the other 9 languages fall back to English for 108 of them (limitation 1). |
+| 10 | Screenshots reviewed by eye | PASS after fixes #2, #5 | See the list in section V5. |
+
+## v1.2.1-V3. Bugs found and fixed
+
+| # | File(s) | Fix |
+|---|---|---|
+| 1 | `js/views/services.js`, `js/views/results.js` | **Two autos and a cab for the same station → hotel transfer:** the catalogue "Prepaid auto-rickshaw (station booth)", the comparison auto and the "Station → hotel sedan transfer" had different leg keys, so a presenter could plan all three (timeline showed 11:15 booth auto, 11:20 cab, 11:20 auto). The station transfer is now one leg whichever card it comes from: a station auto replaces the other station auto and drops an unpaid station cab, and any station cab drops the planned auto (also in `OT.trip.add`). A station → landmark auto is not treated as the transfer. |
+| 2 | `css/traveller.css` | **Meter prices clipped on phones:** "≈ ₹20 per person" ran 9 px past the e-rickshaw card at 375 px (37 px at 320) and "In your plan · pay on meter" ran 28 px past the card, making the results page 2 px wider than the screen. The meter price and the meter button now wrap inside the card. |
+| 3 | `js/agents/agents.js` | **Return date in the wrong year:** "train from Delhi to Jaipur on 20 Nov, return on 2 Nov" set the return to **2 Nov 2027**. A return that only parses by rolling into the next year (more than 180 days out) is now ignored like any return before departure; "28 Dec … return on 3 Jan" still gives 3 Jan. |
+| 4 | `js/data/rail.js` | **Return cheaper than outward on the same route:** 12011 Kalka Shatabdi CC was ₹915 but 12012 (the return) was a generated ₹550, so the headline round trip read ₹1,850 out / ₹1,120 back. 12012 now has the same CC sample fare as 12011. |
+| 5 | `tests/e2e.py` | New group `verify v1.2.1` (`--only verify121`, runs with `v121` too): station-transfer one-way rule (booth auto, station cab, comparison auto), no text past a transport card and no overflow after "I’ll take an auto" at 375 (en + hi), the year-roll and New-Year return phrases, equal 12011/12012 fares, and WhatsApp from the payment pop-up for each traveller persona signed in from the visible login page. |
+
+## v1.2.1-V4. Full runs (after the last code change)
+
+| Run | Passed | Failed |
+|---|---|---|
+| `python3 tests/e2e.py --base file` | 1914 | 0 |
+| `python3 tests/e2e.py --base http` | 2283 | 0 |
+| of which `verify v1.2.1` | 46 per base (20 desktop + 26 mobile) | 0 |
+
+Builder baseline before the fixes, same machine: file 1868 / 0.
+
+## v1.2.1-V5. Screens reviewed by eye
+
+Transport comparison (1440, 375, e-rick card after fix), results Transport tab with the meter button, home Round trip (1440, 375), "I heard" with the Return chip, return list (step 2 of 2), round-trip book page, two-PNR pop-up (1440, 375), WhatsApp number prompt and its error state, email dialog over the pop-up, Bookings with Outward/Return, My Journey with the meter auto row and the return as the last stop (375), the one-page itinerary with return band and meter auto (A4, 1440), and tour steps 9, 12, 15–18. No overlap or clipping remains at 375; full-page phone captures show the sticky header mid-page, which is a capture artefact, not a defect.
+
+## v1.2.1-V6. Remaining limitations (most severe first)
+
+1. **Medium: only Hindi has the new v1.2.1 wording.** In the other 9 languages, 108 of the 120 new strings (meter notes, return-train labels, add-return texts) show in English; the toggle, "Return date" and "Pay on meter" are translated. Demo in English or Hindi.
+2. **Medium: the return parser is keyword-based.** "I want to go back home to Delhi from Jaipur" or "… going back home" switches on Round trip (return = 2 days later); "back the same day" is not understood (2 days later). "cancel my return ticket" is read as a train search, as "cancel my ticket" already was in v1.2. The toggle can always be switched to One way by hand. Use the rehearsed phrases.
+3. **Medium (builder): a paid auto booking from an older version stays a normal, cancellable booking** (money was taken).
+4. **Low: at 320 px, My Journey is 16 px wider than the screen** (three cards; present since v1.2). 375 px and wider are clean.
+5. **Low: the catalogue station cab and the comparison cab can still both be planned** for the station → hotel leg (v1.2 behaviour; autos can no longer stack with either).
+6. **Low: "Autos on meter (1)" in Trip cost also counts e-rickshaws;** the timeline names the mode correctly.
+7. **Low (builder): a round trip charges the simulated convenience fee per ticket; "I’ll check out early" does not change the hotel booking; the tour books the first bookable return class.**
+8. **WhatsApp is a wa.me hand-off:** the chat opens with the text typed and the traveller taps Send; nothing is sent by a server. All personas share the owner's number 75898 02655, so every demo message goes to that phone.
+
+## Jury demo checklist
+
+1. Use **Chrome or Edge** on a laptop (window ≥ 1280 px). Open `index.html` by double-click, or run `start-server.bat` / `.sh` (a local server remembers mic permission).
+2. Before the jury arrives: **Settings → Reset demo data**. Check the top bar shows Plan trip · Trains · Hotels · Transport · My Journey · Bookings & refunds.
+3. Set **AI mode to "Simulated only"** unless the Wi-Fi and the Gemini key were tested that morning. Keep the language on **English or Hindi** for the return-train and auto story (other languages show some new labels in English).
+4. Make sure **WhatsApp (web or app) is signed in on 75898 02655**: every persona's WhatsApp button opens that chat directly with the itinerary typed. Allow pop-ups for the page.
+5. **Allow the microphone.** Rehearse "book from Chandigarh to Mumbai train" (one way, tomorrow) and "book from Chandigarh to Mumbai train on Friday and back on Sunday": the Return chip appears and the form flips to **Round trip**. Avoid "going back home" phrasing.
+6. Scripted run: **Start demo** and only *Next* (24 steps). Step 16 opens the pre-filled return search, step 17 books it: point at the two PNRs on My Journey. **×** or Esc exits.
+7. Round trip by hand: **Trains → Round trip → New Delhi → Chandigarh**, pick 12011 CC, then 12012 CC on the return date → one passenger form → outward + return = total → **one** payment → pop-up with **both PNRs** → **WhatsApp** opens directly. In **Bookings & refunds** cancel only the return: the refund shows and My Journey offers **Add return train** again.
+8. Autos: **Transport → Chandigarh**: the auto and e-rickshaw cards have **no Book button**, only "≈ ₹30 on meter" / "≈ ₹20 per person" and "take one from the prepaid auto booth outside Chandigarh station". In the journey Transport tab press **I’ll take an auto**: My Journey shows "Pay on meter", checkout and the payment exclude it, the one-page itinerary lists it as "not included in the total". Picking the cab replaces the auto.
+9. Standalone story: **Hotels → Jaipur → Book now → pay** → pop-up → **Download PDF / WhatsApp** → My Journey "Stay in Jaipur" → **Add a train to this trip**.
+10. Close other tabs, zoom 100% (Ctrl+0), notifications off. Trains, fares, hotels, transport and sends are **simulated**; say so if asked.
+
+---
+
 # IRCTC OneTrip: v1.2.1 builder notes (to be verified)
 
 Builder notes for the owner's two v1.2.1 requests, written by the builder on 3 Nov 2026. **Not yet independently verified.** The v1.2 verification report follows below unchanged.
@@ -149,7 +229,7 @@ Independent verification of v1.2 against the owner's six v1.2 requests, in the o
 7. **Low: the success sound, confetti and PNG rendering depend on the browser.** With reduced motion there is no confetti or animation.
 8. The live Gemini path is still untested (no key); the offline fallback is verified.
 
-## Jury demo checklist
+### v1.2 jury demo checklist (superseded by the v1.2.1 one at the top)
 
 1. Use **Chrome or Edge** on a laptop (window ≥ 1280 px). Open `index.html` by double-click, or run `start-server.bat` / `.sh` (a local server remembers mic permission).
 2. Before the jury arrives: **Settings → Reset demo data**, then check the top bar shows Plan trip · Trains · Hotels · Transport · My Journey · Bookings & refunds.

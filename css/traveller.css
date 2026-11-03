@@ -840,6 +840,7 @@ bdi.keep { unicode-bidi: isolate; white-space: nowrap; font-variant-numeric: tab
 .tx-ver .badge { align-self: flex-start; }
 .tx-act { margin-top: auto; }
 .tx-act .btn { width: 100%; justify-content: center; }
+.tx-act .btn[data-tx-meter] { white-space: normal; text-align: center; line-height: 1.25; padding-top: 6px; padding-bottom: 6px; height: auto; }
 .tx-off { margin: 0; display: flex; gap: 6px; align-items: flex-start; }
 .tx-off .ic { margin-top: 3px; }
 .tx-foot { margin: 8px 0 0; }
@@ -1074,7 +1075,8 @@ body.ps-open .modal-root { z-index: 106; }
 .ret-ticket .badge { vertical-align: middle; }
 .lbl-ret { background: var(--saffron-50); color: var(--saffron-700); border-color: #F5D2AE; }
 .tl-addreturn .tl-actions { display: flex; flex-wrap: wrap; gap: 6px; }
-.tx-price-meter bdi { font-size: 1.15rem; }
+.tx-price-meter bdi { font-size: 1.15rem; white-space: normal; }
+@media (max-width: 480px) { .tx-price-meter bdi { font-size: 1rem; } }
 .tx-meter { margin: 0; display: flex; gap: 6px; align-items: flex-start; color: var(--ink-2); background: var(--blue-50); border-radius: 8px; padding: 6px 8px; }
 .tx-meter .ic { flex: none; margin-top: 2px; color: var(--blue-600); }
 .offer .tx-meter { margin: 8px 0; }

@@ -230,7 +230,7 @@
     if (v.verdict === 'unavailable') { OT.toast(t('res.cannotAdd', 'This option is unavailable at source.'), 'error'); return null; }
     var slot = OT.agents.slotFor(x, j);
     var replaced = null;
-    if (x.legKey && OT.meter) { var mr = OT.meter.list(j).filter(function (m) { return m.legKey === x.legKey; })[0]; if (mr) { replaced = mr.title; OT.meter.dropLeg(x.legKey); j = OT.store.get('journey'); } }
+    if (OT.meter) { var mr = OT.meter.dropLeg(x.legKey, x); if (mr) { replaced = mr.title; j = OT.store.get('journey'); } }
     j.items = j.items || [];
     if (x.type === 'hotel') {
       j.items = j.items.filter(function (i) {

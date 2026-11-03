@@ -1,4 +1,4 @@
-# IRCTC OneTrip end-to-end tests. Run from the repo root:  python3 tests/e2e.py [--shots DIR] [--quick] [--only verify,tour,v121] [--base file|http]
+# IRCTC OneTrip end-to-end tests. Run from the repo root:  python3 tests/e2e.py [--shots DIR] [--quick] [--only verify,tour,v121,verify121] [--base file|http]
 # Needs: pip install playwright && python -m playwright install chromium. Not loaded by index.html.
 """Drives the prototype like a presenter (real clicks) on file:// and on a local http.server,
 at 1440x900 and 375x812. Fails on console errors, page errors, placeholder/NaN text,
@@ -1656,6 +1656,83 @@ def v121(browser, base, vp):
     pg.close()
 
 
+# ---------------------------------------------------------------- v1.2.1 independent verification (regressions for the verifier's fixes)
+TX_CLIP_JS = r"""() => [...document.querySelectorAll('.tx-card .tx-price bdi, .tx-card .tx-top strong, .tx-card .tx-act .btn')].map(b => {
+  const c = b.closest('.tx-card'), cr = c.getBoundingClientRect(), pr = parseFloat(getComputedStyle(c).paddingRight);
+  const rg = document.createRange(); rg.selectNodeContents(b); const r = rg.getBoundingClientRect();
+  return { t: b.textContent.trim(), over: Math.round(r.right - (cr.right - pr)) }; }).filter(x => x.over > 1)"""
+
+
+def v121_verify(browser, base, vp):
+    tag = 'v121v-' + vp
+    pg = Page(browser, base, vp, init=OPEN_STUB)
+    p = pg.p
+    pg.go('home'); pg.ev('() => localStorage.clear()'); p.reload(); p.wait_for_function('() => window.OT && OT.router.current()')
+    plus = lambda n: pg.ev('n => OT.data.travel.addDays(OT.data.rail.ymd(new Date()), n)', n)
+    # fix: the station -> hotel transfer is ONE leg whether picked in the comparison or from a catalogue card
+    pg.go('results?to=CDG', 300); pg.wait_run()
+    p.click('[data-ref="H-CDG-01"] [data-add]'); p.wait_for_timeout(250)
+    p.click('[data-tab="cab"]'); p.wait_for_timeout(200)
+    p.click('[data-panel="cab"] .tx-card[data-mode="auto"] [data-tx-meter]'); p.wait_for_timeout(300)
+    if vp == 'mobile':
+        o = pg.ev(OVERFLOW)
+        check('results Transport tab after "I’ll take an auto": no horizontal overflow at 375 (meter button wraps)', o['doc'] <= o['w'] and not o['offenders'], o)
+        check('results Transport tab: no text runs past a transport card edge', not pg.ev(TX_CLIP_JS), pg.ev(TX_CLIP_JS))
+    p.click('[data-ref="C-CDG-03"] [data-meter-ref]'); p.wait_for_timeout(300)
+    rides = pg.ev('() => OT.meter.list()')
+    check('station transfer: the booth auto replaces the comparison auto (one auto for the station -> hotel leg)', len(rides) == 1 and rides[0].get('refId') == 'C-CDG-03', rides)
+    p.click('[data-ref="C-CDG-01"] [data-add]'); p.wait_for_timeout(300)
+    j = pg.ev('() => OT.store.get("journey")')
+    check('station transfer: adding the station cab (C-CDG-01) drops the planned auto', not (j.get('meterRides') or []) and any(i['refId'] == 'C-CDG-01' for i in j['items']), [j.get('meterRides'), [i['refId'] for i in j['items']]])
+    p.click('[data-panel="cab"] .tx-card[data-mode="auto"] [data-tx-meter]'); p.wait_for_timeout(300)
+    j = pg.ev('() => OT.store.get("journey")')
+    check('station transfer: "I’ll take an auto" drops the unpaid station cab (C-CDG-01)', len(j.get('meterRides') or []) == 1 and not any(i['refId'] == 'C-CDG-01' and i['status'] == 'selected' for i in j['items']), [j.get('meterRides'), [i['refId'] for i in j['items']]])
+    pg.go('transport?city=CDG&from=stn%3ACDG&to=lm%3AS-CDG-01&pax=2', 300)
+    j0 = len(pg.ev('() => OT.meter.list()'))
+    check('a station -> landmark leg is not treated as the station transfer', pg.ev('() => { const c = OT.data.transport.compare({ city: "CDG", from: "stn:CDG", to: OT.data.transport.places("CDG").find(x => x.kind === "landmark").id, pax: 2 }); return OT.meter.fromOption(c, c.options.find(o => o.mode === "auto")).station; }') is False and j0 == 1)
+    pg.no_errors('v1.2.1 verify station transfer ' + vp)
+    # fix: meter prices / buttons never run past the card on a phone, in English and Hindi
+    if vp == 'mobile':
+        for lang in ('en', 'hi'):
+            pg.ev('l => OT.i18n.setLang(l)', lang)
+            for city in ('NDLS', 'CDG'):
+                pg.go('transport?city=%s&pax=2' % city, 300)
+                bad = pg.ev(TX_CLIP_JS)
+                check('#/transport %s (%s): "≈ ₹X on meter" / "≈ ₹20 per person" fit inside the card at 375' % (city, lang), not bad, bad)
+        pg.ev('() => OT.i18n.setLang("en")')
+    # fix: a return day that only parses by rolling into next year is ignored; a New Year return still works
+    c = pg.ev('() => OT.agents.parseCommand("train from Delhi to Jaipur on 20 Nov, return on 2 Nov")')
+    check('parser: "20 Nov, return on 2 Nov" -> round trip, return date ignored (not next year)', c.get('round') and not c.get('ret') and c.get('retBad'), c)
+    c = pg.ev('() => OT.agents.parseCommand("Delhi to Jaipur train on 28 Dec return on 3 Jan")')
+    check('parser: "28 Dec … return on 3 Jan" -> return 6 days later (across New Year)', c.get('ret') == pg.ev('d => OT.data.travel.addDays(d, 6)', c.get('date')), c)
+    # fix: 12011 / 12012 Kalka Shatabdi CC cost the same both ways on a round trip
+    pg.go('trains?from=NDLS&to=CDG&trip=round&date=%s&ret=%s&pax=2' % (plus(6), plus(9)), 400)
+    p.locator('.trn[data-train="12011"] .cls-tile[data-cls="CC"]:not([disabled]), .trn[data-train="12011"] .cls-tile:not([disabled])').first.click(); p.wait_for_timeout(400)
+    p.locator('.trn[data-train="12012"] .cls-tile:not([disabled])').first.click(); p.wait_for_selector('#pax-form')
+    fo = pg.ev('() => +document.querySelector("[data-fare-out]").lastChild.textContent.replace(/[^0-9]/g, "")')
+    fr = pg.ev('() => +document.querySelector("[data-fare-ret]").lastChild.textContent.replace(/[^0-9]/g, "")')
+    check('round trip NDLS ⇄ CDG on 12011 + 12012 CC: outward and return fares match (%s / %s)' % (fo, fr), fo == fr and fo > 0)
+    pg.close()
+    # owner request B: each traveller persona, signed in from the visible login page, gets WhatsApp straight to +91 75898 02655
+    for per in ('sunita', 'ramesh', 'arjun', 'neha'):
+        pg = Page(browser, base, vp, init=OPEN_STUB)
+        p = pg.p
+        pg.go('home'); pg.ev('() => localStorage.clear()'); p.reload(); p.wait_for_function('() => window.OT && OT.router.current()')
+        pg.go('login', 300)
+        p.click('[data-signin-persona="%s"]' % per); p.wait_for_timeout(400)
+        check('%s signed in from the login page with phone +91 75898 02655' % per, pg.ev('() => (OT.store.get("user") || {}).phone') == '+91 75898 02655')
+        pg.go('trains?from=NDLS&to=CDG&date=%s&pax=1' % plus(5), 400)
+        p.locator('.trn .cls-tile:not([disabled])').first.click(); p.wait_for_selector('#pax-form'); fill_pax(p)
+        p.click('#trn-pay'); pg.modal_ok(keep_success=True); p.wait_for_selector('.ps-overlay.show .ps-card', timeout=8000)
+        pnr = re.findall(r'PNR\s*(\d{10})', p.inner_text('.ps-card'))
+        p.click('.ps-overlay [data-it="wa"]'); p.wait_for_timeout(300)
+        op = pg.ev('() => window.__opened')
+        check('%s: pop-up WhatsApp opens wa.me/917589802655 with the PNR typed, no number prompt' % per,
+              op and op[-1].startswith('https://wa.me/917589802655?text=') and pnr and pnr[0] in op[-1] and p.locator('.modal-backdrop.show').count() == 0, (op[-1:], pnr))
+        pg.no_errors('v1.2.1 verify WhatsApp %s %s' % (per, vp))
+        pg.close()
+
+
 # ---------------------------------------------------------------- main
 def free_port():
     s = socket.socket(); s.bind(('127.0.0.1', 0)); port = s.getsockname()[1]; s.close(); return port
@@ -1760,6 +1837,12 @@ def main():
                             v121(browser, base, vp)
                         except Exception:
                             check('v1.2.1 completed', False, ' | '.join(l.strip() for l in traceback.format_exc().splitlines() if 'e2e.py' in l or 'Error' in l)[:900])
+                    GROUP[0] = 'verify v1.2.1 ' + tag
+                    if want('v121') or want('verify121'):
+                        try:
+                            v121_verify(browser, base, vp)
+                        except Exception:
+                            check('verify v1.2.1 completed', False, ' | '.join(l.strip() for l in traceback.format_exc().splitlines() if 'e2e.py' in l or 'Error' in l)[:900])
             browser.close()
     finally:
         srv.terminate()

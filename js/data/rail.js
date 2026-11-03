@@ -223,7 +223,7 @@
     { no: '12011', name: 'Kalka Shatabdi Express', type: 'Shatabdi', from: 'NDLS', to: 'CDG', dep: '07:40', dur: 205, cls: ['CC', 'EC'], days: '1111111', fixedFare: { CC: 915 } },
     { no: '12005', name: 'Kalka Shatabdi Express', type: 'Shatabdi', from: 'NDLS', to: 'CDG', dep: '17:15', dur: 210, cls: ['CC', 'EC'], days: '1111111' },
     { no: '12046', name: 'Chandigarh–New Delhi Shatabdi Express', type: 'Shatabdi', from: 'CDG', to: 'NDLS', dep: '18:20', dur: 200, cls: ['CC', 'EC'], days: '1111111', fixedFare: { CC: 905 } },
-    { no: '12012', name: 'Kalka–New Delhi Shatabdi Express', type: 'Shatabdi', from: 'CDG', to: 'NDLS', dep: '12:15', dur: 215, cls: ['CC', 'EC'], days: '1111111' },
+    { no: '12012', name: 'Kalka–New Delhi Shatabdi Express', type: 'Shatabdi', from: 'CDG', to: 'NDLS', dep: '12:15', dur: 215, cls: ['CC', 'EC'], days: '1111111', fixedFare: { CC: 915 } },
     { no: '12952', name: 'Mumbai Rajdhani Express', type: 'Rajdhani', from: 'NDLS', to: 'BCT', dep: '16:55', dur: 940, cls: ['1A', '2A', '3A'], days: '1111111' },
     { no: '12951', name: 'Mumbai Rajdhani Express', type: 'Rajdhani', from: 'BCT', to: 'NDLS', dep: '17:00', dur: 932, cls: ['1A', '2A', '3A'], days: '1111111' },
     { no: '12302', name: 'Howrah Rajdhani Express', type: 'Rajdhani', from: 'NDLS', to: 'HWH', dep: '16:50', dur: 1025, cls: ['1A', '2A', '3A'], days: '1111111' },

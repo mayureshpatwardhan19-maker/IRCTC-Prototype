@@ -74,6 +74,7 @@
     var v = OT.agents.verifyOne(x);
     if (v.verdict === 'unavailable') { OT.toast(t('res.cannotAdd', 'This option is unavailable at source.'), 'error'); return null; }
     var slot = opts.when ? { when: opts.when, endWhen: opts.endWhen } : OT.agents.slotFor(x, j);
+    if (meterDropLeg(x.legKey, x)) j = OT.store.get('journey');   // one way per leg: a cab/bus/metro replaces the auto planned for it
     j.items = (j.items || []).filter(function (i) {
       if (i.status !== 'selected') return true;
       if (x.type === 'hotel' && i.type === 'hotel') return false;          // one planned stay at a time
@@ -135,7 +136,7 @@
     var name = t(MODE_EN[o.mode][0], MODE_EN[o.mode][1]);
     return { id: OT.uid('MTR'), mode: o.mode, legKey: cmp.legKey, city: cmp.city, title: name + ': ' + cmp.from.short + ' → ' + cmp.to.short, titleEn: (o.en || o.mode) + ': ' + cmp.from.short + ' → ' + cmp.to.short,
       approx: o.total, perPerson: o.perPerson, pax: cmp.pax, basis: 'meter', minutes: o.minutes, km: o.km, when: when, endWhen: OT.agents.time.addMinIso(when, o.minutes || 15),
-      note: o.note2 || null, station: cmp.from.kind === 'station', addedAt: new Date().toISOString() };
+      note: o.note2 || null, station: cmp.from.kind === 'station' && cmp.to.kind === 'hotel', addedAt: new Date().toISOString() };
   }
   function rideFromItem(x, j) {
     j = j || OT.store.get('journey') || {};
@@ -144,22 +145,28 @@
       pax: j.passengers || 1, basis: 'booth', minutes: x.durationMin || 15, when: slot.when || null, endWhen: slot.endWhen || (slot.when ? OT.agents.time.addMinIso(slot.when, x.durationMin || 15) : null),
       note: ['tx.meterBooth', 'No booking needed: {meet}. Pay at the booth or to the driver.', { meet: x.meet || '' }], station: x.offsetMin != null, addedAt: new Date().toISOString() };
   }
+  /* The station → hotel transfer is one leg, whether it was picked in the comparison or from a catalogue card
+   * ("Station → hotel sedan transfer", "Prepaid auto-rickshaw (station booth)"): only one way to get there is planned. */
+  function isStationTransfer(y) { return !!(y && y.type === 'cab' && y.offsetMin != null); }
   /** Mark a ride (replaces a planned mode for the same leg). Returns the ride. */
   function meterAdd(ride) {
     if (!ride) return null;
     return meterSave(function (j) {
-      j.meterRides = j.meterRides.filter(function (r) { return r.legKey !== ride.legKey; });
+      j.meterRides = j.meterRides.filter(function (r) { return r.legKey !== ride.legKey && !(ride.station && r.station); });
       // one way per leg: drop an unpaid cab/bus/metro planned for the same leg (paid bookings stay untouched)
-      j.items = (j.items || []).filter(function (i) { var y = D().get(i.refId); return !(i.status === 'selected' && y && y.legKey && y.legKey === ride.legKey); });
+      j.items = (j.items || []).filter(function (i) { var y = D().get(i.refId); return !(i.status === 'selected' && y && ((y.legKey && y.legKey === ride.legKey) || (ride.station && isStationTransfer(y)))); });
       j.meterRides.push(ride);
       return ride;
     });
   }
   function meterRemove(id) { return meterSave(function (j) { j.meterRides = j.meterRides.filter(function (r) { return r.id !== id; }); return true; }); }
-  /** Drop the meter ride for a leg (called when a bookable mode is picked for that leg). */
-  function meterDropLeg(legKey) {
-    if (!legKey || !meterList().some(function (r) { return r.legKey === legKey; })) return;
-    meterSave(function (j) { j.meterRides = j.meterRides.filter(function (r) { return r.legKey !== legKey; }); });
+  /** Drop the meter ride for a leg (called when a bookable mode is picked for that leg). Pass the picked item to
+   * also drop an auto planned for the station → hotel transfer when that item is a station transfer. Returns the dropped ride. */
+  function meterDropLeg(legKey, x) {
+    var st = isStationTransfer(x), hit = meterList().filter(function (r) { return (legKey && r.legKey === legKey) || (st && r.station); })[0];
+    if (!hit) return null;
+    meterSave(function (j) { j.meterRides = j.meterRides.filter(function (r) { return !((legKey && r.legKey === legKey) || (st && r.station)); }); });
+    return hit;
   }
   /** Older saved data: a planned (unpaid) auto / e-rickshaw sitting in journey.items becomes a pay-on-meter ride. */
   function meterMigrate() {
