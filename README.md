@@ -1,4 +1,4 @@
-# IRCTC OneTrip — AI-powered, multilingual integrated travel platform (prototype v1.2)
+# IRCTC OneTrip — AI-powered, multilingual integrated travel platform (prototype v1.2.1)
 
 > **One journey. One dashboard. In your language.**
 > A working prototype for **Case 13 — "How should IRCTC expand its digital travel platform?"**
@@ -41,7 +41,7 @@ There is no build step and no dependencies: plain HTML, CSS and JavaScript (clas
 
 ## 🎬 3-minute jury demo
 
-Click **Start demo** in the header. The 22-step guided tour drives the app by itself, so you only press **Next**:
+Click **Start demo** in the header. The 24-step guided tour drives the app by itself, so you only press **Next**:
 
 1. **Sign in as a persona** (`#/login`): Sunita Sharma, a family traveller from New Delhi who prefers Hindi. The language,
    home city, party of 3 and preferences load automatically.
@@ -67,6 +67,11 @@ Not taking a train? The home widget has tabs for **Trains | Hotels | Local trans
 any service can be booked on its own and becomes a light trip in My Journey (e.g. *"Stay in Jaipur, 9–11 Nov"*), with
 **"Add a train to this trip"** any time.
 
+**New in v1.2.1:** a flight-style **One way | Round trip** toggle on every train search (outward train → return train → passengers →
+one payment, two PNRs), **"Add return train"** on My Journey for trips booked one way, and **autos / e-rickshaws are never booked**:
+they show "≈ ₹X on meter" with "No booking needed: take one from the prepaid auto booth outside … station; pay the driver".
+Say it too: *"book from Chandigarh to Mumbai train on Friday and back on Sunday"*, *"… aur Sunday ko wapas"*, *"वापसी रविवार"*.
+
 Try typing any route in the home box, e.g. **"book from Chandigarh to Mumbai train"**, "चंडीगढ़ से मुंबई ट्रेन कल",
 "hotel in Hyderabad", "status of my train", "refund kab milega".
 
@@ -81,17 +86,19 @@ Pre-demo checklist: see [`docs/VERIFICATION.md`](docs/VERIFICATION.md#jury-demo-
 | **Navigation** | header | Always a horizontal bar on top: Plan trip · Trains · Hotels · Transport · My Journey · Bookings & refunds, with "Partners & admin ▾" on desktop. On tablets and phones the bar scrolls sideways (icons + short labels, active tab kept in view). No hamburger list. |
 | **Traveller** | `#/home` | Tabbed booking widget: **Trains** (the main, train-first path) · **Hotels** · **Local transport** · **Food** · **Sightseeing** · **Packages**. Below it, the "type or speak" box with **I heard** chips, sample voice queries, PNR import, **For you** suggestions |
 | | `#/hotels?city=&in=&out=&guests=&rooms=&min=&max=` | Hotels on their own, with a visible **Budget per night** control (dual slider ₹500–₹15,000, min/max inputs, quick chips, live "x of y hotels within budget") |
-| | `#/transport?city=&from=&to=&date=&time=&pax=` | **Cab · auto · bus · metro · e-rickshaw · walk** side by side for any leg (station, airport, hotel, landmark typeahead): total + per-person price, time, wait/frequency, comfort, luggage, door-to-door, last-mile walk, CO₂, availability (metro only in cities that have one), Cheapest / Fastest / Best-for-your-group badges, source + checked time + verification badge |
+| | `#/transport?city=&from=&to=&date=&time=&pax=` | **Cab · auto · bus · metro · e-rickshaw · walk** side by side for any leg (station, airport, hotel, landmark typeahead): total + per-person price, time, wait/frequency, comfort, luggage, door-to-door, last-mile walk, CO₂, availability (metro only in cities that have one), Cheapest / Fastest / Best-for-your-group badges, source + checked time + verification badge. **Cab, metro and bus have a Book button; auto-rickshaws and shared e-rickshaws do not (v1.2.1):** they run on the meter / are flagged down, so they show "≈ ₹X on meter" (e-rick "≈ ₹20 per person") and "No booking needed: take one from the prepaid auto booth outside <station>; pay the driver" |
+| | Pay-on-meter rides (v1.2.1) | In the journey flow "I'll take an auto" puts the ride in the plan, timeline and one-page itinerary as "Pay on meter, ≈ ₹X". It is stored apart from bookable items (`journey.meterRides`), so it is **never** in the cart total, charged, given a booking ref, listed in Bookings & refunds or sent to a partner. Catalogue prepaid-booth autos behave the same. Older saved data with an unpaid auto is migrated on load |
 | | `#/food?city=`, `#/sights?city=` | Meals and entry tickets on their own |
 | | `#/itinerary-print` | **One-page itinerary**: A4 print view (Download PDF = print → Save as PDF), PNG drawn on a canvas, one-tap WhatsApp (opens `wa.me/91<number>?text=…` straight away with the signed-in traveller's mobile; asks for a number only if none is on the profile, with "Change number" under the buttons) and email (mailto with consent + confirm); sends are logged for Admin |
 | | `#/trains?from=&to=&date=` | Simulated timetable for any of ~40 stations (typeahead in English and Indian scripts), classes, fares, availability (AVAILABLE / RAC / WL / REGRET), filters and sort, verification badge + source + checked time per train |
+| | `#/trains?…&trip=round&ret=` (v1.2.1) | **One way \| Round trip** toggle (home Trains tab and `#/trains`); Round trip reveals a Return date (default depart + 2 days, never before departure). Step 1 picks the outward train + class, step 2 the return train B → A on the return date, then one passenger form, a fare summary with outward + return lines and the total, **one payment** and a pop-up with **both PNRs**. Voice / text: "… on Friday and back on Sunday", "return on 28 Nov", "aur Sunday ko wapas", "वापसी रविवार" (Return chip in "I heard") |
 | | `#/trains/book`, `#/trains/ticket?pnr=` | Passengers (persona prefilled), fare breakup, confirm, simulated payment, PNR e-ticket, "plan your stay" CTA |
 | | `#/login` | **Demo persona cards**: 4 travellers (Sunita · Delhi · Hindi, Ramesh · Chennai · Tamil pilgrim, Arjun · Pune · Marathi student, Neha · Mumbai · business), Partner P-101, Admin/Bank. The header user menu switches persona or signs out |
 | | `#/results?to=` | Budget filter bar on top; the **Transport** tab compares the station → hotel leg across every mode. Any destination station (generated, deterministic listings for cities outside the three scripted scenarios). Live Agent Trace, verified hotels, cabs, food and sightseeing, source + checked time + verification badge, price comparison, read aloud |
-| | `#/journey` | **My Journey**: Trip Readiness ring with explanation, chronological route-line timeline, conflict flags and fixes |
+| | `#/journey` | **My Journey**: Trip Readiness ring with explanation, chronological route-line timeline, conflict flags and fixes. The return train is the last stop; booked one way, an **"Add return train"** row (after hotel and cab) opens the B → A search on the check-out date and attaches the result to the same journey. Conflict check: a return that leaves before hotel check-out is flagged ("I'll check out early") |
 | | `#/checkout` | Booking and payment summary, simulated UPI/card, confirm step, confirmation |
 | | Payment success | After every payment (train, standalone, journey): animated check, amount, paid to, UPI ref, transaction ID, date-time, booking refs, Done / View itinerary / Share, a soft chime (mutable), confetti off under reduced motion |
-| | `#/bookings` | Standalone hotel / transport / food / sight bookings with cancellation, train ticket with railway-style cancellation charge and refund, persona trip history, status tracking, policy-based cancellation, refund tracker, support tickets |
+| | `#/bookings` | Standalone hotel / transport / food / sight bookings with cancellation, train ticket with railway-style cancellation charge and refund (outward and return each with their own PNR, cancellable independently), persona trip history, status tracking, policy-based cancellation, refund tracker, support tickets |
 | | Assistant drawer | Multilingual chat, 🎤 mic, 🔊 speaker, language switch mid-chat, "show original", human escalation |
 | **Tourism Partner** | `#/partner` | Login/registration, listings CRUD, price and availability calendar, enquiries with Partner Agent draft replies, bookings, revenue, conversion and cancellations, feedback |
 | **Admin & Bank** | `#/admin` | Users and providers, bookings and GTV, complaints, refunds and SLA, partner performance, destination demand, **long-weekend demand forecast**, financial products (escrow, T+1 settlement), language and support analytics, platform health |

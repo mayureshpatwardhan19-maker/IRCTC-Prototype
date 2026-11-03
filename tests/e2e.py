@@ -1,4 +1,4 @@
-# IRCTC OneTrip end-to-end tests. Run from the repo root:  python3 tests/e2e.py [--shots DIR] [--quick] [--only verify,tour] [--base file|http]
+# IRCTC OneTrip end-to-end tests. Run from the repo root:  python3 tests/e2e.py [--shots DIR] [--quick] [--only verify,tour,v121] [--base file|http]
 # Needs: pip install playwright && python -m playwright install chromium. Not loaded by index.html.
 """Drives the prototype like a presenter (real clicks) on file:// and on a local http.server,
 at 1440x900 and 375x812. Fails on console errors, page errors, placeholder/NaN text,
@@ -1111,7 +1111,7 @@ def v12_flow(browser, base, vp):
     avail = [c for c in cards if c['on']]
     check('Delhi: cab, auto, metro, bus compared side by side (>= 4 modes available)', len(cards) == 6 and len(avail) >= 4 and {'cab', 'auto', 'metro', 'bus'} <= {c['m'] for c in avail}, cards)
     check('Delhi airport leg: metro available (Airport Express)', any(c['m'] == 'metro' and c['on'] for c in cards), cards)
-    check('every bookable mode has a verification badge + source + checked time', all(c['ver'] and c['src'] for c in avail if c['m'] != 'walk'), cards)
+    check('every bookable mode has a verification badge + source + checked time', all(c['ver'] and c['src'] for c in avail if c['m'] not in ('walk', 'auto', 'erick')), cards)
     badges = pg.ev('() => [...document.querySelectorAll(".tx-card [data-badge]")].map(b => b.dataset.badge)')
     check('Cheapest, Fastest and Best for your group badges', all(x in badges for x in ['cheapest', 'fastest', 'group']), badges)
     facts = p.inner_text('.tx-card[data-mode="bus"]')
@@ -1356,6 +1356,306 @@ def v12_verify(browser, base, vp):
     pg.close()
 
 
+# ---------------------------------------------------------------- v1.2.1: pay-on-meter autos + return trains (builder)
+TX_CARDS_JS = """() => [...document.querySelectorAll('.tx-card')].map(c => ({ m: c.dataset.mode, on: !c.classList.contains('is-off'),
+  pick: !!c.querySelector('[data-tx-pick]'), meterBtn: !!c.querySelector('[data-tx-meter]'),
+  btns: [...c.querySelectorAll('button')].map(b => b.innerText.trim()), price: (c.querySelector('.tx-price') || {}).innerText || '',
+  note: (c.querySelector('[data-meter-note]') || {}).innerText || '' }))"""
+
+
+def fill_pax(p):
+    for i in range(p.locator('.pax-row').count()):
+        if not p.input_value('#px-n%d' % i): p.fill('#px-n%d' % i, 'Test Traveller %d' % i)
+        if not p.input_value('#px-a%d' % i): p.fill('#px-a%d' % i, '34')
+
+
+def v121(browser, base, vp):
+    tag = 'v121-' + vp
+    pg = Page(browser, base, vp, init=OPEN_STUB)
+    p = pg.p
+    pg.go('home'); pg.ev('() => localStorage.clear()'); p.reload(); p.wait_for_function('() => window.OT && OT.router.current()')
+    plus = lambda n: pg.ev('n => OT.data.travel.addDays(OT.data.rail.ymd(new Date()), n)', n)
+
+    # ---- 1. #/transport: autos and e-rickshaws are never bookable; cab / metro / bus keep Book
+    for city, sname in [('NDLS', 'New Delhi'), ('JP', 'Jaipur'), ('CDG', 'Chandigarh')]:
+        pg.go('transport?city=%s&pax=2' % city, 400)
+        cards = pg.ev(TX_CARDS_JS)
+        by = {c['m']: c for c in cards}
+        a = by.get('auto', {})
+        check('%s transport: auto has NO Book/Select button' % city, a and not a['pick'] and not any(re.search(r'\bBook\b|Select|Add', b) for b in a['btns']), a)
+        check('%s transport: auto shows "≈ ₹X on meter"' % city, re.search(r'≈ ₹[\d,]+ on meter', a.get('price', '')), a.get('price'))
+        check('%s transport: auto note "No booking needed: take one from the prepaid auto booth outside %s station; pay the driver"' % (city, sname),
+              'No booking needed' in a.get('note', '') and 'prepaid auto booth outside %s' % sname in a.get('note', '') and 'pay the driver' in a.get('note', ''), a.get('note'))
+        e = by.get('erick', {})
+        if e.get('on'):
+            check('%s transport: e-rickshaw has NO Book button, shows "≈ ₹20 per person" and "flag one down"' % city,
+                  not e['pick'] and not any(re.search(r'\bBook\b', b) for b in e['btns']) and re.search(r'≈ ₹[\d,]+ per person', e['price']) and 'flag one down' in e['note'], e)
+        for m in ('cab', 'bus', 'metro'):
+            c = by.get(m)
+            if c and c['on']:
+                check('%s transport: %s keeps its Book button' % (city, m), c['pick'] and any(b == 'Book' for b in c['btns']), c['btns'])
+        badges = pg.ev('() => [...document.querySelectorAll(".tx-card[data-mode=auto] [data-badge], .tx-card[data-mode=erick] [data-badge]")].length')
+        check('%s transport: no Book button anywhere on an auto/e-rick card (badges %d allowed, no booking implied)' % (city, badges), p.locator('.tx-card[data-mode="auto"] [data-tx-pick], .tx-card[data-mode="erick"] [data-tx-pick]').count() == 0)
+        pg.scan('transport %s %s' % (city, tag), 'v121-transport-%s-%s' % (city, vp))
+    # Hindi: meter wording translated
+    pg.ev('() => OT.i18n.setLang("hi")'); pg.go('transport?city=CDG&pax=2', 400)
+    check('Hindi transport: "≈ ₹ मीटर से" and "बुकिंग की ज़रूरत नहीं"', 'मीटर से' in p.inner_text('.tx-card[data-mode="auto"]') and 'बुकिंग की ज़रूरत नहीं' in p.inner_text('.tx-card[data-mode="auto"]'), p.inner_text('.tx-card[data-mode="auto"]')[:200])
+    pg.scan('transport CDG hi ' + tag)
+    pg.ev('() => OT.i18n.setLang("en")')
+    # home Local transport tab -> same comparison
+    pg.go('home', 300); p.click('[data-bw="transport"]'); p.wait_for_timeout(150); p.click('#tw-go'); p.wait_for_timeout(400)
+    check('home Local transport tab -> #/transport without auto Book buttons', 'transport' in p.url and p.locator('.tx-card[data-mode="auto"] [data-tx-pick]').count() == 0 and p.locator('.tx-card[data-mode="auto"] [data-meter-note]').count() == 1)
+
+    # ---- 2. journey flow: "I'll take an auto" is in the plan but never in the total, payment, bookings or partner data
+    pg.go('home'); pg.ev('() => localStorage.clear()'); p.reload(); p.wait_for_function('() => window.OT && OT.router.current()')
+    pg.go('results?to=CDG', 300); pg.wait_run()
+    p.click('[data-ref="H-CDG-01"] [data-add]'); p.wait_for_timeout(250)
+    p.click('[data-tab="cab"]'); p.wait_for_timeout(200)
+    check('results: catalogue prepaid auto (C-CDG-03) has no "Add to journey" button, shows "I’ll take an auto"', p.locator('[data-ref="C-CDG-03"] [data-add]').count() == 0 and p.locator('[data-ref="C-CDG-03"] [data-meter-ref]').count() == 1 and 'No booking needed' in p.inner_text('[data-ref="C-CDG-03"]'))
+    check('journey Transport tab: auto/e-rick cards have no Select button', p.locator('[data-panel="cab"] .tx-card[data-mode="auto"] [data-tx-pick], [data-panel="cab"] .tx-card[data-mode="erick"] [data-tx-pick]').count() == 0)
+    p.click('[data-panel="cab"] .tx-card[data-mode="auto"] [data-tx-meter]'); p.wait_for_timeout(300)
+    j = pg.ev('() => OT.store.get("journey")')
+    check('"I’ll take an auto" stores a pay-on-meter ride (journey.meterRides), not a journey item', len(j.get('meterRides') or []) == 1 and j['meterRides'][0]['mode'] == 'auto' and not any('-auto' in i['refId'] for i in j['items']), [j.get('meterRides'), [i['refId'] for i in j['items']]])
+    check('the auto card now says "In your plan · pay on meter"', 'In your plan' in p.inner_text('[data-panel="cab"] .tx-card[data-mode="auto"]'))
+    p.click('[data-panel="cab"] .tx-card[data-mode="cab"] [data-tx-pick]'); p.wait_for_timeout(300)
+    j = pg.ev('() => OT.store.get("journey")')
+    check('one way per leg: picking the cab replaces the auto for that leg', not (j.get('meterRides') or []) and any('-cab' in i['refId'] for i in j['items']), [j.get('meterRides'), [i['refId'] for i in j['items']]])
+    p.click('[data-panel="cab"] .tx-card[data-mode="auto"] [data-tx-meter]'); p.wait_for_timeout(300)
+    j = pg.ev('() => OT.store.get("journey")')
+    check('…and marking the auto again drops the unpaid cab for that leg', len(j.get('meterRides') or []) == 1 and not any(i['refId'].startswith('TR-') for i in j['items']), [i['refId'] for i in j['items']])
+    approx = j['meterRides'][0]['approx']
+    pg.go('journey', 400)
+    check('My Journey timeline: auto row "pay on meter, ≈ ₹X" with no booking ref', p.locator('.tl-row.k-meter').count() == 1 and 'Pay on meter' in p.inner_text('.tl-row.k-meter') and ('≈ ' + pg.ev('n => OT.inr(n)', approx)) in p.inner_text('.tl-row.k-meter'), p.inner_text('.tl-row.k-meter') if p.locator('.tl-row.k-meter').count() else '')
+    check('Trip cost: autos listed as "not charged here", not in "To pay now"', p.locator('[data-cost-meter]').count() == 1)
+    due = pg.ev('() => { const j = OT.store.get("journey"); return j.items.filter(i => i.status === "selected").reduce((s, i) => s + OT.agents.lineFor(i, j).amount, 0); }')
+    check('To pay now equals the hotel only (auto excluded)', pg.ev('n => OT.inr(n)', due) in p.inner_text('.cost .due'), [due, p.inner_text('.cost .due')])
+    rd = pg.ev('() => OT.agents.readiness(OT.store.get("journey")).parts.find(x => x.id === "transfer")')
+    check('readiness: station transfer by auto counts (nothing to book)', rd['state'] == 'meter' and rd['pts'] == rd['w'], rd)
+    pg.scan('journey with auto ' + tag, 'v121-journey-auto-' + vp)
+    pg.go('checkout', 300)
+    lines = pg.ev('() => [...document.querySelectorAll(".co-line")].map(l => l.innerText)')
+    check('checkout: no auto line; meter note shown', len(lines) == 1 and not any('Auto' in x for x in lines) and p.locator('[data-co-meter]').count() == 1, lines)
+    p.click('#pay-btn')
+    cl = p.inner_text('.modal-backdrop.show .confirm-lines')
+    check('confirm dialog: the auto is not charged', 'Auto-rickshaw' not in cl, cl[:200])
+    pg.modal_ok()
+    bk = pg.ev('() => OT.store.get("bookings") || []')
+    check('payment created bookings only for the hotel (no auto booking ref)', len(bk) == 1 and bk[0]['type'] == 'hotel' and not any('auto' in (b.get('refId') or '') or 'Auto' in b['title'] for b in bk), [b['title'] for b in bk])
+    pg.go('bookings', 300)
+    check('Bookings & refunds: no auto card, nothing cancellable for the auto', 'Auto-rickshaw' not in p.inner_text('#view') and p.locator('[data-cancel]').count() == 1)
+    j = pg.ev('() => OT.store.get("journey")')
+    check('after payment the auto is still in the plan as pay-on-meter (never confirmed)', len(j.get('meterRides') or []) == 1)
+    pg.ev('() => OT.store.set("user", { name: "Rajinder Singh", email: "p101.shivalik@demo.onetrip", role: "partner", partnerId: "P-101", org: "Hotel Shivalik View", personaId: "partner", simulated: true })')
+    pg.go('partner/bookings', 500)
+    check('partner dashboard: no auto booking sent to partners', 'Auto-rickshaw' not in p.inner_text('#view'))
+    pg.ev('() => OT.store.set("user", undefined)')
+    pg.go('itinerary-print', 500)
+    it = p.inner_text('.itin-sheet')
+    check('one-page itinerary: auto row "Pay on meter" + "not included in the total"', 'Pay on meter' in it and 'not included in the total' in it, it[:300])
+    check('itinerary total paid excludes the auto', pg.ev('() => OT.itinerary.model().total') == bk[0]['amount'])
+    # older saved data: an unpaid auto item in journey.items + a paid legacy auto booking
+    pg.ev('''() => { const s = JSON.parse(localStorage.getItem("onetrip.v1")); const j = s.journey;
+        const x = { id: "TR-CDG-11111-auto", type: "cab", mode: "auto", leg: true, legKey: "CDG|stn:CDG|htl:H-CDG-02", city: "CDG", partnerId: "IRCTC-PPA", name: "Auto-rickshaw: old leg", provider: "Chandigarh prepaid auto (sample)", managed: "irctc", price: 120, basis: "trip", rating: null, reviews: 0, durationMin: 12,
+          availability: "available", tags: ["auto"], policy: { fullUntilH: 1, thenPct: 0 }, source: { name: "Auto meter tariff card (sample)", ref: "LOCAL/CDG/auto/1", checkedMins: 5 }, providerSource: { name: "x", price: 120, rating: null, ratingNotApplicable: true, availability: "available", checkedMins: 3 }, compare: [] };
+        s.txItems = Object.assign(s.txItems || {}, { [x.id]: x });
+        j.items.push({ id: "IT-legacy1", type: "cab", refId: x.id, title: x.name, price: 120, listedPrice: 120, when: j.train.arrDate + "T11:30", status: "selected", verification: "verified", city: "CDG" });
+        s.bookings.push({ ref: "OT-LTR-OLD01", journeyId: "JRN-old", itemId: "IT-old", refId: x.id, type: "cab", partnerId: "IRCTC-PPA", title: x.name, provider: x.provider, amount: 120, status: "confirmed", paidAt: new Date().toISOString(), method: "UPI (simulated)", city: "CDG", when: j.train.arrDate + "T11:30", txn: "SIM-TXN-OLD", simulated: true });
+        localStorage.setItem("onetrip.v1", JSON.stringify(s)); }''')
+    p.reload(); p.wait_for_function('() => window.OT && OT.router.current()'); p.wait_for_timeout(300)
+    j = pg.ev('() => OT.store.get("journey")')
+    check('older saved data: unpaid auto item migrated to a pay-on-meter ride (no crash)', not any(i['refId'] == 'TR-CDG-11111-auto' for i in j['items']) and any(r['legKey'] == 'CDG|stn:CDG|htl:H-CDG-02' for r in j.get('meterRides') or []), [j.get('meterRides')])
+    for r in ['journey', 'checkout', 'bookings', 'itinerary-print']:
+        pg.go(r, 400)
+        check('older saved data: #/%s renders' % r, p.locator('#view .empty-state h2:has-text("Something went wrong")').count() == 0 and 'Something went wrong' not in p.inner_text('#view'))
+    pg.no_errors('v1.2.1 meter ' + vp)
+
+    # ---- 3. round trip search UI (home + #/trains): toggle, return date, validation
+    pg.go('home'); pg.ev('() => localStorage.clear()'); p.reload(); p.wait_for_function('() => window.OT && OT.router.current()')
+    check('home Trains tab: "One way | Round trip" toggle, One way by default, return date hidden', p.locator('#tf-trip [data-trip="one"][aria-checked="true"]').count() == 1 and p.locator('#tf-trip [data-trip="round"]').is_visible() and not p.locator('#tf-ret').is_visible())
+    p.click('#tf-trip [data-trip="round"]'); p.wait_for_timeout(150)
+    d = p.input_value('#tf-date'); r = p.input_value('#tf-ret')
+    check('Round trip reveals a Return date = depart + 2 days', p.locator('#tf-ret').is_visible() and r == pg.ev('d => OT.data.travel.addDays(d, 2)', d), [d, r])
+    pg.scan('home round trip ' + tag, 'v121-home-round-' + vp)
+    p.fill('#tf-ret', pg.ev('d => OT.data.travel.addDays(d, -1)', d)); p.click('#train-go'); p.wait_for_timeout(250)
+    check('validation: return before departure is rejected', 'cannot be before' in p.inner_text('#tf-err') and 'home' in pg.ev('() => OT.router.current().name'), p.inner_text('#tf-err'))
+    p.fill('#tf-ret', pg.ev('d => OT.data.travel.addDays(d, 3)', d)); p.click('#train-go'); p.wait_for_timeout(500)
+    q = pg.ev('() => OT.router.current().params.query')
+    check('round-trip search carries trip=round & ret', q.get('trip') == 'round' and q.get('ret') == pg.ev('d => OT.data.travel.addDays(d, 3)', d), q)
+    check('#/trains: toggle shows Round trip, return date filled, "step 1 of 2"', p.locator('#ts-trip [data-trip="round"][aria-checked="true"]').count() == 1 and p.input_value('#ts-ret') == q['ret'] and 'step 1 of 2' in p.inner_text('.page-head'))
+    p.fill('#ts-ret', pg.ev('d => OT.data.travel.addDays(d, -2)', q['date'])); p.click('#ts-go'); p.wait_for_timeout(250)
+    check('#/trains validation: return before departure rejected', 'cannot be before' in p.inner_text('#ts-err'))
+    p.click('#ts-trip [data-trip="one"]'); p.wait_for_timeout(100); p.click('#ts-go'); p.wait_for_timeout(400)
+    check('switching back to One way drops the return', not pg.ev('() => OT.router.current().params.query.trip'))
+    pg.ev('() => OT.i18n.setLang("hi")'); pg.go('trains?from=NDLS&to=CDG&trip=round&ret=' + plus(5) + '&date=' + plus(3), 400)
+    check('Hindi: toggle "एक तरफ़ | आना-जाना" and "वापसी की तारीख़"', 'आना-जाना' in p.inner_text('#ts-trip') and 'वापसी की तारीख़' in p.inner_text('.date-pair'))
+    pg.scan('trains round hi ' + tag)
+    pg.ev('() => OT.i18n.setLang("en")')
+
+    # ---- 4. typed and spoken phrases understand the return
+    friday = pg.ev('() => { const d = new Date(); d.setHours(0,0,0,0); let k = (5 - d.getDay() + 7) % 7 || 7; d.setDate(d.getDate() + k); return OT.data.rail.ymd(d); }')
+    sunday = pg.ev('f => OT.data.travel.addDays(f, 2)', friday)
+    for ph in ['book from Chandigarh to Mumbai train on Friday and back on Sunday', 'Chandigarh se Mumbai train Friday ko aur Sunday ko wapas', 'चंडीगढ़ से मुंबई ट्रेन शुक्रवार को, वापसी रविवार']:
+        c = pg.ev('t => OT.agents.parseCommand(t)', ph)
+        check('parser: "%s" -> CDG→CSMT Fri %s, return Sun %s' % (ph, friday, sunday), c['from'] == 'CDG' and c['to'] == 'CSMT' and c['date'] == friday and c.get('round') and c.get('ret') == sunday, c)
+    c = pg.ev('() => OT.agents.parseCommand("train from Delhi to Jaipur on 20 Nov, return on 28 Nov")')
+    check('parser: "return on 28 Nov" sets the return date', c['date'].endswith('-11-20') and (c.get('ret') or '').endswith('-11-28'), c)
+    c = pg.ev('() => OT.agents.parseCommand("book from Chandigarh to Mumbai train on Friday")')
+    check('parser: no return words -> one way (regression)', not c.get('round') and not c.get('ret'), c)
+    pg.go('home', 300)
+    p.fill('#ask-input', 'book from Chandigarh to Mumbai train on Friday and back on Sunday'); p.wait_for_timeout(450)
+    check('home "Understood" preview shows a Return chip and flips the form to Round trip', p.locator('#parse-preview [data-chip-return]').count() == 1 and p.locator('#tf-trip [data-trip="round"][aria-checked="true"]').count() == 1 and p.input_value('#tf-ret') == sunday, p.inner_text('#parse-preview'))
+    p.press('#ask-input', 'Enter'); p.wait_for_function('() => OT.router.current().name === "trains"', timeout=6000); p.wait_for_timeout(300)
+    q = pg.ev('() => OT.router.current().params.query')
+    check('typed phrase opens trains CDG→CSMT with ret=Sunday', q.get('from') == 'CDG' and q.get('to') == 'CSMT' and q.get('date') == friday and q.get('ret') == sunday and q.get('trip') == 'round', q)
+    check('"I heard" panel shows the return date as a chip', p.locator('[data-tour="heard"] [data-chip-return]').count() == 1 and pg.ev('d => OT.fmtDate(d)', sunday) in p.inner_text('[data-tour="heard"]'), p.inner_text('[data-tour="heard"]') if p.locator('[data-tour="heard"]').count() else '')
+    pg.go('home', 300)
+    pg.ev('() => OT.views.home.sample("hi", "चंडीगढ़ से मुंबई ट्रेन शुक्रवार और रविवार को वापस")')
+    p.wait_for_selector('#voice-status.vs-ok', timeout=10000); p.wait_for_timeout(300)
+    check('spoken (simulated ASR, Hindi) "…रविवार को वापस": Return chip in the preview', p.locator('#parse-preview [data-chip-return]').count() == 1 and p.input_value('#tf-ret') == sunday, p.inner_text('#parse-preview'))
+    pg.no_errors('v1.2.1 search ' + vp)
+
+    # ---- 5. round trip booking: outward -> return -> passengers -> pay once -> 2 PNRs
+    pg.go('home'); pg.ev('() => localStorage.clear()'); p.reload(); p.wait_for_function('() => window.OT && OT.router.current()')
+    pg.ev('() => OT.auth.signInPersona("sunita", { quiet: true })'); p.wait_for_timeout(300)
+    pg.ev('() => OT.i18n.setLang("en")')
+    d1, d2 = plus(6), plus(9)
+    pg.go('trains?from=NDLS&to=CDG&trip=round&date=%s&ret=%s&pax=2' % (d1, d2), 400)
+    p.locator('.trn .cls-tile:not([disabled])').first.click(); p.wait_for_timeout(400)
+    q = pg.ev('() => OT.router.current().params.query')
+    check('picking the outward class opens the RETURN list (CDG → NDLS on the return date)', q.get('step') == 'ret' and q.get('ono') and p.locator('[data-return-list]').count() == 1 and p.locator('[data-outward-pick]').count() == 1 and 'step 2 of 2' in p.inner_text('.page-head'), q)
+    ret_from = pg.ev('() => [...document.querySelectorAll(".trn .trn-times .small bdi.keep")].slice(0, 2).map(b => b.textContent)')
+    check('return list runs B → A', ret_from and ret_from[0] == 'CDG' and ret_from[1] == 'NDLS', ret_from)
+    pg.scan('return list ' + tag, 'v121-return-list-' + vp)
+    p.locator('.trn .cls-tile:not([disabled])').first.click(); p.wait_for_selector('#pax-form')
+    check('book page: outward + return summaries', p.locator('[data-tour="trn-sum"]').count() == 1 and p.locator('[data-return-sum]').count() == 1)
+    fo = pg.ev('() => +document.querySelector("[data-fare-out]").lastChild.textContent.replace(/[^0-9]/g, "")')
+    fr = pg.ev('() => +document.querySelector("[data-fare-ret]").lastChild.textContent.replace(/[^0-9]/g, "")')
+    gt = pg.ev('() => +document.querySelector("[data-fare-legs] .grand strong").innerText.replace(/[^0-9]/g, "")')
+    check('fare summary: outward + return lines and total (%s + %s = %s)' % (fo, fr, gt), fo > 0 and fr > 0 and gt == fo + fr)
+    check('one Pay button for both trains', 'once' in p.inner_text('#trn-pay') and p.locator('#trn-pay').count() == 1)
+    pg.scan('round trip book ' + tag, 'v121-book-round-' + vp)
+    fill_pax(p)
+    nb0 = pg.ev('() => (OT.store.get("bookings") || []).length')
+    p.click('#trn-pay')
+    cl = p.inner_text('.modal-backdrop.show .confirm-lines')
+    check('confirm dialog lists both trains', 'Return train' in cl, cl[:300])
+    pg.modal_ok(keep_success=True); p.wait_for_selector('.ps-overlay.show .ps-card', timeout=8000)
+    ps = p.inner_text('.ps-card')
+    pnrs = re.findall(r'PNR (\d{10})', ps)
+    check('payment pop-up shows BOTH PNRs', len(set(pnrs)) == 2, ps[:500])
+    check('payment pop-up amount = round-trip total', p.inner_text('.ps-amount').replace(',', '').strip().endswith(str(gt)), p.inner_text('.ps-amount'))
+    p.wait_for_function('() => { const o = document.querySelector(".ps-overlay"); return o && getComputedStyle(o).opacity === "1"; }', timeout=5000); p.wait_for_timeout(700)
+    pg.scan('round trip pop-up ' + tag, 'v121-popup-round-' + vp)
+    p.click('[data-ps-done]'); p.wait_for_timeout(300)
+    bk = pg.ev('() => (OT.store.get("bookings") || []).filter(b => b.type === "train")')
+    j = pg.ev('() => OT.store.get("journey")')
+    check('two train bookings (outward + return), one transaction, same journey', len(bk) == nb0 + 2 and {b.get('leg') for b in bk} == {'outward', 'return'} and len({b['txn'] for b in bk}) == 1 and all(b['journeyId'] == j['id'] for b in bk), [(b.get('leg'), b['pnr']) for b in bk])
+    rb = [b for b in bk if b.get('leg') == 'return'][0]
+    check('journey.returnTrain = the return PNR (B → A)', j['returnTrain'] and j['returnTrain']['pnr'] == rb['pnr'] and j['returnTrain']['from'] == 'CDG' and j['returnTrain']['to'] == 'NDLS' and j['train']['from'] == 'NDLS', j.get('returnTrain'))
+    check('ticket page shows the return too', p.locator('[data-ticket-return]').count() == 1)
+    pg.go('journey', 500)
+    evs = pg.ev('() => [...document.querySelectorAll(".tl .tl-row[data-ev]")].map(r => r.dataset.ev)')
+    check('My Journey: return train is the last stop on the railway timeline', evs[-2:] == ['rdep', 'rarr'], evs)
+    check('My Journey: return ticket card with its PNR', rb['pnr'] in p.inner_text('[data-return-ticket]'))
+    rdp = pg.ev('() => OT.agents.readiness(OT.store.get("journey")).parts.find(x => x.id === "ret")')
+    check('readiness: return journey counted', rdp['state'] in ('booked', 'confirm') and rdp['pts'] > 0, rdp)
+    check('no "Add return train" once a return is booked', p.locator('[data-add-return]').count() == 0)
+    pg.scan('journey round trip ' + tag, 'v121-journey-round-' + vp)
+    # hotel / cab / food planning continues for the destination
+    pg.go('results?to=CDG', 300); pg.wait_run()
+    p.click('[data-ref="H-CDG-01"] [data-add]'); p.wait_for_timeout(250)
+    j = pg.ev('() => OT.store.get("journey")')
+    check('planning continues for the destination (hotel added to the same round-trip journey)', j['returnTrain'] and any(i['refId'] == 'H-CDG-01' for i in j['items']))
+    hotel = [i for i in j['items'] if i['refId'] == 'H-CDG-01'][0]
+    check('hotel nights follow the return date (check-out on the return day)', hotel['endWhen'][:10] == d2, hotel['endWhen'])
+    # conflict: return leaves before hotel check-out
+    pg.ev('''() => OT.store.update("journey", j => { j.items.forEach(i => { if (i.type === "hotel") i.endWhen = j.returnTrain.date + "T23:30"; }); return j; })''')
+    pg.go('journey', 400)
+    check('conflict: return departs before hotel check-out is flagged', p.locator('[data-conflict="ret-checkout"]').count() == 1 and 'before hotel check-out' in p.inner_text('[data-conflict="ret-checkout"]'))
+    OPEN_JS = '() => OT.agents.itinerary(OT.store.get("journey")).conflicts.filter(c => !c.resolved).length'
+    r0 = pg.ev(OPEN_JS)
+    p.click('[data-fix-ret]'); p.wait_for_timeout(300)
+    r1 = pg.ev(OPEN_JS)
+    check('"I’ll check out early" resolves it (open conflicts %s -> %s)' % (r0, r1), p.locator('[data-conflict="ret-checkout"].resolved').count() == 1 and r1 == r0 - 1)
+    # itinerary print: return PNR in A4, PNG, WhatsApp and email text
+    pg.go('itinerary-print', 600)
+    check('one-page itinerary (A4): return section with the return PNR', p.locator('[data-it-return]').count() == 1 and rb['pnr'] in p.inner_text('[data-it-return]'))
+    if vp == 'desktop':
+        pdf = p.pdf(format='A4', print_background=True)
+        n = len(re.findall(rb'/Type\s*/Page[^s]', pdf))
+        check('round-trip itinerary prints on exactly 1 A4 page', n == 1, n)
+    txt = pg.ev('() => OT.itinerary.summaryText()')
+    check('WhatsApp/email text includes "Return PNR"', ('Return PNR ' + rb['pnr']) in txt, txt[:300])
+    png = pg.ev('() => OT.itinerary.png(1).length')
+    check('PNG (canvas) renders with the return', png > 20000, png)
+    pg.go('journey', 400)
+    n0 = len(pg.ev('() => window.__opened'))
+    p.click('.itin-card [data-it="wa"]'); p.wait_for_timeout(250)
+    opened = pg.ev('() => window.__opened')
+    check('WhatsApp opens wa.me/917589802655 (persona phone) with the return PNR in the text', len(opened) == n0 + 1 and opened[-1].startswith('https://wa.me/917589802655?text=') and rb['pnr'] in opened[-1], opened[-1:])
+    # admin sees both tickets
+    pg.ev('() => OT.auth.signInPersona("admin", { quiet: true })'); p.wait_for_timeout(300)
+    lv = pg.ev('() => OT.data.analytics.live().trains.map(b => b.pnr)')
+    check('Admin live data counts both train tickets (outward + return)', all(b['pnr'] in lv for b in bk), lv)
+    pg.ev('() => OT.auth.signInPersona("sunita", { quiet: true })'); p.wait_for_timeout(300); pg.ev('() => OT.i18n.setLang("en")')
+    # Bookings & refunds: both PNRs, independently cancellable
+    pg.go('bookings', 400)
+    ob = [b for b in bk if b.get('leg') == 'outward'][0]
+    check('Bookings & refunds: outward and return each have their own Cancel', p.locator('[data-bk="%s"] [data-cancel]' % ob['ref']).count() == 1 and p.locator('[data-bk="%s"] [data-cancel]' % rb['ref']).count() == 1 and p.locator('[data-bk="%s"] [data-leg="return"]' % rb['ref']).count() == 1)
+    est = pg.ev('r => { const b = OT.store.get("bookings").find(x => x.ref === r); return OT.agents.refundFor(b).amount; }', rb['ref'])
+    p.click('[data-bk="%s"] [data-cancel]' % rb['ref']); p.wait_for_selector('.modal-backdrop.show .btn-danger')
+    cl = p.inner_text('.modal-backdrop.show .confirm-lines')
+    check('return cancel dialog: its PNR + railway charge + refund', rb['pnr'] in cl and 'Cancellation charge' in cl and pg.ev('n => OT.inr(n)', est) in cl, cl[:300])
+    pg.modal_ok()
+    st = pg.ev('() => { const j = OT.store.get("journey"); return { ret: j.returnTrain && j.returnTrain.status, out: j.train.status, b: OT.store.get("bookings").filter(x => x.type === "train").map(x => [x.leg, x.status]) }; }')
+    check('cancelling the return leaves the outward ticket confirmed', st['ret'] == 'CANCELLED' and st['out'] != 'CANCELLED' and ['outward', 'confirmed'] in st['b'] and ['return', 'cancelled'] in st['b'], st)
+    check('refund for the return computed like the outward (railway rule)', pg.ev('r => OT.store.get("bookings").find(x => x.ref === r).cancellation.refundAmount', rb['ref']) == est and est > 0)
+    pg.go('journey', 400)
+    evs = pg.ev('() => [...document.querySelectorAll(".tl .tl-row[data-ev]")].map(r => r.dataset.ev)')
+    check('after cancelling the return: it leaves the timeline and "Add return train" is offered again', 'rdep' not in evs and p.locator('[data-add-return]').count() >= 1, evs)
+    pg.go('bookings', 300)
+    p.click('[data-bk="%s"] [data-cancel]' % ob['ref']); pg.modal_ok()
+    check('outward can be cancelled on its own too', pg.ev('r => OT.store.get("bookings").find(x => x.ref === r).status', ob['ref']) == 'cancelled')
+    pg.no_errors('v1.2.1 round trip ' + vp)
+
+    # ---- 6. one way now, "Add return train" later from My Journey (same journey)
+    pg.go('home'); pg.ev('() => localStorage.clear()'); p.reload(); p.wait_for_function('() => window.OT && OT.router.current()')
+    pg.ev('() => OT.auth.signInPersona("sunita", { quiet: true })'); p.wait_for_timeout(300); pg.ev('() => OT.i18n.setLang("en")')
+    pg.go('trains?from=NDLS&to=CDG&date=%s&pax=2' % plus(4), 400)
+    p.locator('.trn[data-train="12011"] .cls-tile:not([disabled])').first.click(); p.wait_for_selector('#pax-form'); fill_pax(p)
+    p.click('#trn-pay'); pg.modal_ok()
+    p.wait_for_selector('#plan-stay'); p.click('#plan-stay'); pg.wait_run()
+    p.click('[data-ref="H-CDG-01"] [data-add]'); p.wait_for_timeout(250)
+    p.click('[data-tab="cab"]'); p.click('[data-ref="C-CDG-01"] [data-add]'); p.wait_for_timeout(250)
+    j0 = pg.ev('() => OT.store.get("journey")')
+    pg.go('journey', 400)
+    href = p.get_attribute('.tl-addreturn [data-add-return]', 'href') or ''
+    co = [i for i in j0['items'] if i['type'] == 'hotel'][0]['endWhen'][:10]
+    check('My Journey: "Add return train" after hotel and cab, pre-filled CDG → NDLS on the check-out date', 'from=CDG' in href and 'to=NDLS' in href and 'date=' + co in href and 'attach=return' in href, href)
+    rows = pg.ev('() => [...document.querySelectorAll(".tl > li")].map(l => l.className)')
+    check('"Add return train" row comes after the hotel and cab rows', rows and 'tl-addreturn' in rows[-1], rows[-3:])
+    pg.scan('journey add-return ' + tag, 'v121-journey-addreturn-' + vp)
+    p.click('.tl-addreturn [data-add-return]'); p.wait_for_selector('.trn', timeout=6000)
+    check('return search runs with an "it joins your journey" note', p.locator('[data-attach-note]').count() == 1 and pg.ev('() => OT.router.current().params.query.attach') == 'return')
+    p.locator('.trn .cls-tile:not([disabled])').first.click(); p.wait_for_selector('#pax-form'); fill_pax(p)
+    p.click('#trn-pay'); pg.modal_ok(keep_success=True); p.wait_for_selector('.ps-overlay.show .ps-card', timeout=8000)
+    ps = p.inner_text('.ps-card')
+    p.click('[data-ps-done]'); p.wait_for_timeout(300)
+    j1 = pg.ev('() => OT.store.get("journey")')
+    rbk = pg.ev('() => (OT.store.get("bookings") || []).filter(b => b.leg === "return")')
+    check('return attached to the SAME journey (id, outward PNR, hotel and cab kept)', j1['id'] == j0['id'] and j1['pnr'] == j0['pnr'] and j1['returnTrain'] and j1['returnTrain']['from'] == 'CDG' and len(j1['items']) == len(j0['items']), [j0['id'], j1['id']])
+    check('return booking has its own PNR in Bookings, same journey id', len(rbk) == 1 and rbk[0]['pnr'] == j1['returnTrain']['pnr'] and rbk[0]['pnr'] != j1['pnr'] and rbk[0]['journeyId'] == j1['id'] and rbk[0]['pnr'] in ps)
+    check('back on My Journey: return is the last timeline stop', pg.ev('() => [...document.querySelectorAll(".tl .tl-row[data-ev]")].map(r => r.dataset.ev).slice(-2)') == ['rdep', 'rarr'])
+    pg.go('checkout', 300)
+    check('checkout lists the return train as already paid (not charged again)', p.locator('[data-co-return]').count() == 1 and 'Not charged again' in p.inner_text('[data-co-return]'))
+    pg.go('itinerary-print', 500)
+    check('itinerary print has the added return PNR', rbk[0]['pnr'] in p.inner_text('[data-it-return]'))
+    p.reload(); p.wait_for_function('() => window.OT && OT.router.current()'); p.wait_for_timeout(400)
+    check('after reload the return is still attached (persists in OT.store)', pg.ev('() => OT.store.get("journey").returnTrain.pnr') == rbk[0]['pnr'])
+    pg.no_errors('v1.2.1 add return ' + vp)
+    pg.close()
+
+
 # ---------------------------------------------------------------- main
 def free_port():
     s = socket.socket(); s.bind(('127.0.0.1', 0)); port = s.getsockname()[1]; s.close(); return port
@@ -1454,6 +1754,12 @@ def main():
                                 v12_nav(browser, base)
                             except Exception:
                                 check('v1.2 nav completed', False, traceback.format_exc()[-600:])
+                    GROUP[0] = 'v1.2.1 ' + tag
+                    if want('v121'):
+                        try:
+                            v121(browser, base, vp)
+                        except Exception:
+                            check('v1.2.1 completed', False, ' | '.join(l.strip() for l in traceback.format_exc().splitlines() if 'e2e.py' in l or 'Error' in l)[:900])
             browser.close()
     finally:
         srv.terminate()
