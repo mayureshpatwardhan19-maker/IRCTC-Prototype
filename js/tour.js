@@ -60,7 +60,7 @@
       } },
     { title: 'Or just say it, in Hindi', text: 'Sunita speaks: “क्रिसमस पर दिल्ली से चंडीगढ़ की ट्रेन बुक करो” (book a Delhi to Chandigarh train on Christmas). Simulated ASR types it out and the live parse shows exactly what was understood: intent, from, to and date.',
       target: '[data-tour="voice"]', enter: function () { return go('home').then(function () { return view('home').sample ? view('home').sample('hi', VOICE_HI) : null; }); } },
-    { title: 'Step 1 · Train search results', text: 'Every station pair gets a deterministic simulated timetable: Shatabdi, Vande Bharat, Express and more, with running days, class-wise fares and seat status (AVAILABLE, RAC, waitlist with a chance of confirmation, REGRET). Each train carries a verification badge, source and check time. Final booking happens on IRCTC — simulated here.',
+    { title: 'Step 1 · Train search results', text: 'Every station pair gets a deterministic simulated timetable: Shatabdi, Vande Bharat, Express and more, with running days, class-wise fares and seat status (AVAILABLE, RAC, waitlist with a chance of confirmation, REGRET). Each train carries a verification badge, source and check time. Like a flight search, the form has a One way | Round trip toggle: Round trip asks for a return date and books both trains with one payment. Final booking happens on IRCTC — simulated here.',
       target: ['.trn[data-train="12011"]', '[data-tour="trains"]'], enter: function () {
         var u = OT.forYou && OT.forYou.persona();
         var lws = OT.data.demand.longWeekends(null, 3), lw = lws[xmasIndex()];
@@ -116,12 +116,34 @@
       } },
     { title: 'My Journey: the train comes first', text: 'One dashboard. The booked train is the first node of the railway route-line timeline (navy), local legs follow in saffron. The Itinerary Agent flags a conflict: arrival 11:05 vs hotel check-in 14:00.',
       target: ['[data-tour="conflict"]', '[data-tour="timeline"]'], enter: function () { return go('journey').then(function () { return waitFor(function () { return document.querySelector('[data-tour="timeline"]'); }, 3000); }); } },
-    { title: 'Resolved, readiness rises', text: 'We leave bags at the station cloakroom and link a return train. The conflict turns green and the weighted Trip Readiness ring climbs, with every point explained.',
+    { title: 'Resolved, readiness rises', text: 'We leave bags at the station cloakroom. The conflict turns green and the weighted Trip Readiness ring climbs, with every point explained. The only open item is the return journey.',
       target: '[data-tour="readiness"]', enter: function () {
         if (view('journey').fix) view('journey').fix('cloak');
-        var j = OT.store.get('journey');
-        if (j && !j.returnTrain && j.returnOption && view('journey').linkReturn) view('journey').linkReturn();
         return OT.sleep(400);
+      } },
+    { title: 'Add the return train', text: 'After the hotel and cab, My Journey offers “Add return train”: the search opens the other way (Chandigarh → New Delhi) on the hotel check-out date, pre-filled. Whatever is booked here joins the SAME journey with its own PNR. Autos and e-rickshaws, by contrast, are never booked: they show “≈ ₹ on meter, pay the driver”.',
+      target: ['[data-attach-note]', '[data-tour="trains"]'], enter: function () {
+        var path = view('journey').addReturnPath && view('journey').addReturnPath();
+        if (!path) return OT.sleep(100);
+        return go(path, 'trains').then(function () { return waitFor(function () { return document.querySelector('.trn'); }, 4000); });
+      } },
+    { title: 'Return booked: two PNRs, one journey', text: 'Picking the return train reuses the passengers, shows the fare, asks for confirmation and pays (simulated). The return is the last stop on the railway timeline, gets its own cancellable entry in Bookings & refunds, and the Trip Readiness “Return journey” check is now complete.',
+      target: ['[data-ev="rdep"]', '[data-tour="readiness"]'], enter: function () {
+        var tile = document.querySelector('.trn .cls-tile:not([disabled])');
+        if (!tile) return go('journey');
+        tile.click();
+        return waitFor(function () { return document.querySelector('#trn-pay'); }, 4000).then(function (b) {
+          if (!b) return null;
+          b.click();
+          return waitFor(function () { return document.querySelector('.modal-backdrop.show .modal-foot .btn-primary'); }, 3000);
+        }).then(function (ok) {
+          if (!ok) return null;
+          clickPrimaryInModal();
+          return waitFor(function () { return document.querySelector('.ps-overlay.show .ps-card'); }, 6000);
+        }).then(function () {
+          if (OT.paySuccess) OT.paySuccess.close(true);
+          return route() === 'journey' ? null : go('journey');
+        }).then(function () { return waitFor(function () { return document.querySelector('[data-tour="readiness"]'); }, 3000); });
       } },
     { title: 'Review & pay the stay (simulated)', text: 'Itemised hotel, cab and sight with GST shown. The train ticket appears separately as already paid, so it is never charged twice. Payment details are masked demo values.',
       target: '[data-tour="co-items"]', enter: function () { return go('checkout'); } },

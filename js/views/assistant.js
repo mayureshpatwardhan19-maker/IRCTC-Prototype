@@ -96,7 +96,7 @@
         busy = false;
         var date = cmd.date || OT.trains.tomorrow(), sn = function (c) { return OT.data.travel.stationName(c, replyLang); };
         var res = cmd.from ? { text: OT.i18n.tIn(replyLang, 'asst.trainReply', 'I can search trains {from} → {to} on {date}. Tap below to see timings, fares and seats (simulated).', { from: sn(cmd.from), to: sn(cmd.to), date: OT.fmtDate(date) }),
-          confidence: 0.9, engine: 'rules', actions: [{ label: OT.i18n.tIn(replyLang, 'trn.search', 'Search trains'), route: OT.trains.path({ from: cmd.from, to: cmd.to, date: date, cls: cmd.cls || '', pax: cmd.pax || '', heard: text }) }] }
+          confidence: 0.9, engine: 'rules', actions: [{ label: OT.i18n.tIn(replyLang, 'trn.search', 'Search trains'), route: OT.trains.path({ from: cmd.from, to: cmd.to, date: date, cls: cmd.cls || '', pax: cmd.pax || '', heard: text, trip: cmd.round ? 'round' : '', ret: cmd.round ? (cmd.ret || OT.data.travel.addDays(date, 2)) : '' }) }] }
           : { text: OT.i18n.tIn(replyLang, 'asst.trainFrom', 'Train to {to}: from which station are you travelling?', { to: sn(cmd.to) }), confidence: 0.7, engine: 'rules', actions: [] };
         var m = { role: 'bot', lang: replyLang, res: res };
         msgs.push(m); renderMsgs();

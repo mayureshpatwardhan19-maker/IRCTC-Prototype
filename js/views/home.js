@@ -112,12 +112,12 @@
       '<div class="bw-panel" role="tabpanel" id="bw-p-trains" aria-labelledby="bw-t-trains"' + (tab === 'trains' ? '' : ' hidden') + '>' +
       /* Step 1: trains */
       '<form id="train-form" class="train-form" novalidate data-tour="train-form">' +
-      '<p class="step-label">' + OT.icon('train', 15) + ' ' + OT.esc(t('home.step1', 'Step 1 · Find trains')) + '</p>' +
+      '<div class="step-row"><p class="step-label">' + OT.icon('train', 15) + ' ' + OT.esc(t('home.step1', 'Step 1 · Find trains')) + '</p>' + TR.tripToggle('tf', q.trip === 'round') + '</div>' +
       '<div class="tf-grid">' + TR.picker('tf-from', from, t('search.from', 'From')) +
       '<button type="button" class="icon-btn swap" id="tf-swap" aria-label="' + OT.esc(t('trn.swap', 'Swap stations')) + '">' + OT.icon('refresh', 16) + '</button>' +
       TR.picker('tf-to', to, t('search.to', 'To')) + '</div>' +
       '<div class="tf-grid2">' +
-      '<div class="field"><label for="tf-date">' + OT.esc(t('search.date', 'Travel date')) + '</label><input id="tf-date" class="input" type="date" min="' + OT.data.rail.ymd(new Date()) + '" value="' + OT.esc(q.date || TR.tomorrow()) + '"></div>' +
+      TR.datePair('tf', q.date || TR.tomorrow(), q.ret, q.trip === 'round') +
       '<div class="field"><label for="tf-cls">' + OT.esc(t('trn.class', 'Class')) + '</label><select id="tf-cls" class="input"><option value="">' + OT.esc(t('trn.allCls', 'All classes')) + '</option>' +
       ['1A', '2A', '3A', '3E', 'SL', 'CC', 'EC'].map(function (c) { return '<option value="' + c + '">' + c + '</option>'; }).join('') + '</select></div>' +
       '<div class="field"><label for="tf-pax">' + OT.esc(t('search.pax', 'Travellers')) + '</label><select id="tf-pax" class="input">' + [1, 2, 3, 4, 5, 6].map(function (n) { return '<option' + (n === (u.party ? u.party.length : 2) ? ' selected' : '') + '>' + n + '</option>'; }).join('') + '</select></div></div>' +
@@ -316,6 +316,11 @@
     if (cmd.from) OT.trains.setCode(root, 'tf-from', cmd.from);
     if (cmd.to) { OT.trains.setCode(root, 'tf-to', cmd.to); setBoard(cmd.to); }
     if (cmd.date) { var di = root.querySelector('#tf-date'); if (di) di.value = cmd.date; }
+    if (cmd.intent === 'train' && cmd.round) {
+      OT.trains.setRound(root, 'tf', true);
+      var ri = root.querySelector('#tf-ret'), dv = (root.querySelector('#tf-date') || {}).value;
+      if (ri) { ri.value = cmd.ret || (dv ? D().addDays(dv, 2) : ri.value); if (dv) ri.min = dv; }
+    }
     if (cmd.cls) { var ci = root.querySelector('#tf-cls'); if (ci) ci.value = cmd.cls; }
     if (cmd.pax) { var pi = root.querySelector('#tf-pax'); if (pi) pi.value = String(cmd.pax); }
     if (budget) { OT.budget.set(root, 'hwb', (OT.state.stay && OT.state.stay.min) || OT.budget.MIN, budget); readStay(); }
@@ -364,9 +369,9 @@
         var f = root.querySelector(cmd.missing.indexOf('from') >= 0 ? '#tf-from' : '#tf-to'); if (f && !opts.noFocus) f.focus();
         return Promise.resolve(cmd);
       }
-      var date = cmd.date || OT.trains.tomorrow();
-      status(heard + '<br>' + OT.icon('train', 14) + ' ' + OT.esc(t('cmd.goTrains', 'Searching trains {from} → {to} on {date}…', { from: name(cmd.from), to: name(cmd.to), date: OT.fmtDate(date) })), 'ok');
-      var path = OT.trains.path({ from: cmd.from, to: cmd.to, date: date, cls: cmd.cls || '', pax: cmd.pax || (root.querySelector('#tf-pax') || {}).value, heard: text });
+      var date = cmd.date || OT.trains.tomorrow(), ret = cmd.round ? (cmd.ret || D().addDays(date, 2)) : '';
+      status(heard + '<br>' + OT.icon('train', 14) + ' ' + OT.esc(ret ? t('cmd.goTrainsRound', 'Searching trains {from} → {to} on {date}, return on {ret}…', { from: name(cmd.from), to: name(cmd.to), date: OT.fmtDate(date), ret: OT.fmtDate(ret) }) : t('cmd.goTrains', 'Searching trains {from} → {to} on {date}…', { from: name(cmd.from), to: name(cmd.to), date: OT.fmtDate(date) })), 'ok');
+      var path = OT.trains.path({ from: cmd.from, to: cmd.to, date: date, cls: cmd.cls || '', pax: cmd.pax || (root.querySelector('#tf-pax') || {}).value, heard: text, trip: ret ? 'round' : '', ret: ret });
       return new Promise(function (res) { navTimer = setTimeout(function () { OT.go(path); res(cmd); }, opts.delay != null ? opts.delay : 700); });
     }
     if (['hotel', 'cab', 'food', 'sight'].indexOf(cmd.intent) >= 0) {
@@ -465,11 +470,12 @@
 
   function submitTrains() {
     var f = OT.trains.codeOf(root, 'tf-from'), to = OT.trains.codeOf(root, 'tf-to'), date = root.querySelector('#tf-date').value, err = root.querySelector('#tf-err');
-    var msg = !f || !to ? t('trn.errPick', 'Pick a From and a To station from the list.') : f === to ? t('trn.errSame', 'From and To must be different stations.') : !date ? t('search.noDate', 'Please choose a travel date.') : OT.data.rail.daysTo(date) < 0 ? t('trn.errPast', 'That date is in the past. Pick today or a later date.') : '';
+    var msg = !f || !to ? t('trn.errPick', 'Pick a From and a To station from the list.') : f === to ? t('trn.errSame', 'From and To must be different stations.') : OT.trains.tripError(root, 'tf');
     if (msg) { err.textContent = msg; err.classList.remove('hidden'); return false; }
     err.classList.add('hidden');
     readStay();
-    OT.go(OT.trains.path({ from: f, to: to, date: date, cls: root.querySelector('#tf-cls').value, pax: root.querySelector('#tf-pax').value }));
+    var tv = OT.trains.tripVals(root, 'tf');
+    OT.go(OT.trains.path({ from: f, to: to, date: date, cls: root.querySelector('#tf-cls').value, pax: root.querySelector('#tf-pax').value, trip: tv.trip, ret: tv.ret }));
     return true;
   }
 
@@ -507,6 +513,7 @@
     var ta = el.querySelector('#ask-input');
     OT.trains.bindPicker(el, 'tf-from');
     OT.trains.bindPicker(el, 'tf-to', function (code) { setBoard(code); });
+    OT.trains.bindTrip(el, 'tf');
     el.querySelector('#tf-swap').addEventListener('click', function () { var a = OT.trains.codeOf(el, 'tf-from'), b = OT.trains.codeOf(el, 'tf-to'); OT.trains.setCode(el, 'tf-from', b); OT.trains.setCode(el, 'tf-to', a); setBoard(a); });
     el.querySelector('#train-form').addEventListener('submit', function (e) { e.preventDefault(); submitTrains(); });
     el.querySelector('#ask-form').addEventListener('submit', function (e) { e.preventDefault(); handleCommand(ta.value); });

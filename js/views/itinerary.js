@@ -23,29 +23,36 @@
     j = j || OT.store.get('journey');
     if (!j) return null;
     var u = OT.store.get('user') || {};
-    var bookings = (OT.store.get('bookings', []) || []).filter(function (b) { return b.journeyId === j.id || (j.pnr && b.type === 'train' && b.pnr === j.pnr); });
+    var rt = OT.agents.liveReturn ? OT.agents.liveReturn(j) : null;
+    var bookings = (OT.store.get('bookings', []) || []).filter(function (b) { return b.journeyId === j.id || (j.pnr && b.type === 'train' && b.pnr === j.pnr) || (rt && b.type === 'train' && b.pnr === rt.pnr); });
     var paid = bookings.filter(function (b) { return b.status === 'confirmed'; });
     var it = OT.agents.itinerary(j), tr = j.train;
     var rows = it.events.map(function (e) {
       var i = e.item, x = i && D().get(i.refId);
       var isTrain = e.kind === 'dep' || e.kind === 'arr' || e.kind === 'rdep' || e.kind === 'rarr';
+      if (e.meter) return { date: e.when ? OT.fmtDate(e.when) : '', time: tm(e.when), title: e.title, sub: OT.meter.note(e.meter), ref: OT.meter.approx(e.meter), contact: '',
+        status: t('tx.meterBadge', 'Pay on meter'), icon: 'auto', train: false, meter: true };
       return {
         date: e.when ? OT.fmtDate(e.when) : '', time: tm(e.when), title: e.title,
         sub: x ? (x.type === 'hotel' ? x.area : x.meet || x.area || x.provider || '') : (e.sub || ''),
         ref: i && i.bookingRef ? i.bookingRef : (isTrain && (e.kind === 'dep' || e.kind === 'arr') && j.pnr ? 'PNR ' + j.pnr : e.kind === 'rdep' && j.returnTrain ? 'PNR ' + j.returnTrain.pnr : ''),
-        contact: x && !x.mode ? contactFor(x.provider) : '', status: i ? (i.status === 'confirmed' ? t('status.confirmed', 'Confirmed') : t('status.selected', 'Planned')) : (isTrain ? (tr && tr.status) || 'CNF' : ''),
+        contact: x && !x.mode ? contactFor(x.provider) : '', status: i ? (i.status === 'confirmed' ? t('status.confirmed', 'Confirmed') : t('status.selected', 'Planned')) : (isTrain ? ((e.kind === 'rdep' || e.kind === 'rarr') && rt ? rt.status || 'CNF' : (tr && tr.status) || 'CNF') : ''),
         icon: isTrain ? 'train' : e.icon || 'info', train: isTrain
       };
     });
     var city = j.scenario ? D().stationName(j.scenario, L()) : '';
     var title = tr ? D().stationName(tr.from, L()) + ' → ' + D().stationName(tr.to, L()) : (j.title || t('trip.stayIn', 'Stay in {city}', { city: city }));
-    var dates = tr ? OT.fmtDate(tr.date) + (j.returnTrain ? ' – ' + OT.fmtDate(j.returnTrain.date) : '') : (j.start ? OT.fmtDate(j.start) + (j.end && j.end !== j.start ? ' – ' + OT.fmtDate(j.end) : '') : '');
+    var dates = tr ? OT.fmtDate(tr.date) + (rt ? ' – ' + OT.fmtDate(rt.date) : '') : (j.start ? OT.fmtDate(j.start) + (j.end && j.end !== j.start ? ' – ' + OT.fmtDate(j.end) : '') : '');
     var total = paid.reduce(function (s, b) { return s + (b.amount || 0); }, 0);
     var refs = paid.map(function (b) { return b.type === 'train' ? 'PNR ' + b.pnr : b.ref; });
     if (j.pnr && !refs.some(function (r) { return r.indexOf(j.pnr) >= 0; })) refs.unshift('PNR ' + j.pnr);
+    if (rt && rt.pnr && !refs.some(function (r) { return r.indexOf(rt.pnr) >= 0; })) refs.push('PNR ' + rt.pnr);
+    var meters = OT.meter ? OT.meter.list(j) : [];
     return {
       id: j.id, name: u.name || t('it.traveller', 'Traveller'), phone: u.phone || '', email: u.email || '', title: title, dates: dates, city: city,
       pax: j.passengers || 1, train: tr && tr.status !== 'PLANNED' ? { no: tr.no, name: tr.name, from: tr.from, to: tr.to, dep: tr.dep, arr: tr.arr, date: tr.date, cls: tr.cls, coach: tr.coach, seats: (tr.seats || []).join(', '), status: tr.status, pnr: j.pnr } : null,
+      ret: rt ? { no: rt.no, name: rt.name, from: rt.from, to: rt.to, dep: rt.dep, arr: rt.arr, date: rt.date, cls: rt.cls, status: rt.status || 'CNF', pnr: rt.pnr } : null,
+      meterTotal: meters.reduce(function (s, r) { return s + (r.approx || 0); }, 0), meterN: meters.length,
       rows: rows, more: Math.max(0, rows.length - MAX_ROWS), total: total, refs: refs, generatedAt: new Date(),
       code: 'ONETRIP|' + j.id + '|' + refs.join(',')
     };
@@ -88,12 +95,16 @@
       (m.train ? '<section class="it-train"><span class="it-k">' + OT.icon('train', 13) + ' PNR</span><strong class="it-pnr">' + keep(m.train.pnr || '—') + '</strong>' +
         '<span>' + keep(m.train.no) + ' ' + OT.esc(m.train.name) + '</span><span>' + keep(m.train.from) + ' ' + keep(m.train.dep) + ' → ' + keep(m.train.to) + ' ' + keep(m.train.arr) + '</span>' +
         '<span>' + keep(m.train.cls) + (m.train.seats ? ' · ' + keep(m.train.coach) + ' / ' + keep(m.train.seats) : '') + ' · ' + keep(m.train.status) + '</span></section>' : '') +
+      (m.ret ? '<section class="it-train it-ret" data-it-return><span class="it-k">' + OT.icon('refresh', 13) + ' ' + OT.esc(t('ret.retLbl', 'Return')) + ' PNR</span><strong class="it-pnr">' + keep(m.ret.pnr) + '</strong>' +
+        '<span>' + keep(m.ret.no) + ' ' + OT.esc(m.ret.name) + '</span><span>' + keep(m.ret.from) + ' ' + keep(m.ret.dep) + ' → ' + keep(m.ret.to) + ' ' + keep(m.ret.arr) + '</span>' +
+        '<span>' + keep(OT.fmtDate(m.ret.date)) + ' · ' + keep(m.ret.cls) + ' · ' + keep(m.ret.status) + '</span></section>' : '') +
       '<ol class="it-tl">' + rows.map(function (r) {
         return '<li class="' + (r.train ? 'is-train' : '') + '"><span class="it-when"><b>' + keep(r.time || '—') + '</b><small>' + keep(r.date) + '</small></span><span class="it-dot">' + OT.icon(r.icon, 11) + '</span>' +
           '<span class="it-what"><b>' + OT.lang.highlight(r.title) + '</b>' + (r.sub ? '<small>' + OT.lang.highlight(r.sub) + '</small>' : '') + (r.contact ? '<small>' + OT.icon('headset', 10) + ' ' + OT.esc(r.contact) + '</small>' : '') + '</span>' +
           '<span class="it-ref">' + (r.ref ? keep(r.ref) : '') + (r.status ? '<small>' + OT.esc(r.status) + '</small>' : '') + '</span></li>';
       }).join('') + '</ol>' +
       (m.more ? '<p class="it-more">' + OT.esc(t('it.more', '+{n} more items in My Journey', { n: m.more })) + '</p>' : '') +
+      (m.meterN ? '<p class="it-more it-meter">' + OT.icon('auto', 11) + ' ' + OT.esc(t('it.meterNote', 'Autos / e-rickshaws: about {p}, paid to the driver on the meter. Not booked and not included in the total.', { p: OT.inr(m.meterTotal) })) + '</p>' : '') +
       (!m.rows.length ? '<p class="it-more">' + OT.esc(t('it.empty', 'No items yet. Add a hotel, transport, food or sights in My Journey.')) + '</p>' : '') +
       '<footer class="it-foot"><div><span class="it-k">' + OT.esc(t('it.refs', 'Booking refs')) + '</span><span>' + (m.refs.length ? m.refs.map(function (r) { return keep(r); }).join(' · ') : '—') + '</span></div>' +
       '<div><span class="it-k">' + OT.esc(t('it.help', 'Help')) + '</span><span>' + OT.esc(t('it.helpText', 'OneTrip support in your language: in-app assistant → “Talk to a human” (sample SLA 2 h)')) + '</span></div>' +
@@ -167,11 +178,18 @@
       ctx.font = '600 26px ' + FONT; ctx.fillStyle = '#1E2A3B';
       ctx.fillText(m.train.no + ' ' + m.train.name + ' · ' + m.train.cls + ' · ' + m.train.status, 96, y + 92);
       ctx.textAlign = 'right'; ctx.fillText(m.train.from + ' ' + m.train.dep + '  →  ' + m.train.to + ' ' + m.train.arr, W - 96, y + 50); ctx.textAlign = 'left';
-      y += 160;
+      y += m.ret ? 132 : 160;
+    }
+    if (m.ret) {
+      ctx.fillStyle = '#FFF3E6'; ctx.fillRect(70, y, W - 140, 100);
+      ctx.fillStyle = '#B85A07'; ctx.font = '700 30px ' + FONT; ctx.fillText(t('ret.retLbl', 'Return') + ' · PNR ' + m.ret.pnr, 96, y + 42);
+      ctx.font = '600 24px ' + FONT; ctx.fillStyle = '#1E2A3B'; ctx.fillText(m.ret.no + ' ' + m.ret.name + ' · ' + m.ret.cls + ' · ' + m.ret.status, 96, y + 80);
+      ctx.textAlign = 'right'; ctx.fillText(OT.fmtDate(m.ret.date) + '  ' + m.ret.from + ' ' + m.ret.dep + '  →  ' + m.ret.to + ' ' + m.ret.arr, W - 96, y + 42); ctx.textAlign = 'left';
+      y += 130;
     }
     // timeline
     ctx.fillStyle = '#0B2C5F'; ctx.font = '700 30px ' + FONT; ctx.fillText(t('tl.title', 'Journey timeline'), 70, y); y += 30;
-    var rows = m.rows.slice(0, MAX_ROWS), rowH = 78;
+    var rows = m.rows.slice(0, MAX_ROWS), rowH = m.ret ? 70 : 78;
     rows.forEach(function (rw, i) {
       var ry = y + i * rowH + 20;
       ctx.fillStyle = '#1E2A3B'; ctx.font = '700 28px ' + FONT; ctx.fillText(rw.time || '—', 70, ry + 28);
@@ -221,9 +239,11 @@
     m = m || model(); if (!m) return '';
     var out = ['IRCTC OneTrip itinerary (simulated)', m.name + ' · ' + m.title + (m.dates ? ' · ' + m.dates : '')];
     if (m.train) out.push('PNR ' + (m.train.pnr || '—') + ' · ' + m.train.no + ' ' + m.train.name + ' ' + m.train.dep + '→' + m.train.arr);
+    if (m.ret) out.push('Return PNR ' + m.ret.pnr + ' · ' + m.ret.no + ' ' + m.ret.name + ' · ' + OT.fmtDate(m.ret.date) + ' ' + m.ret.dep + '→' + m.ret.arr);
     m.rows.slice(0, 8).forEach(function (r) { out.push('• ' + [r.date, r.time].filter(Boolean).join(' ') + ' ' + r.title + (r.ref ? ' (' + r.ref + ')' : '')); });
     if (m.rows.length > 8) out.push('+' + (m.rows.length - 8) + ' more');
     out.push('Total paid: ' + OT.inr(m.total));
+    if (m.meterN) out.push('Autos on meter (pay the driver, not booked): about ' + OT.inr(m.meterTotal));
     out.push('Simulated academic prototype. Not a ticket.');
     return out.join('\n');
   }

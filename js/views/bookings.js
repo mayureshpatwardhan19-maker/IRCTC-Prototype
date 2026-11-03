@@ -30,7 +30,7 @@
     var st = b.status, pol = b.type === 'train' ? { rail: true } : x.policy, tk = b.ticket;
     return '<article class="bkg card-flat' + (b.type === 'train' ? ' bkg-train' : '') + '" data-bk="' + b.ref + '">' +
       '<div class="bk-top"><span class="offer-ic">' + OT.icon(OT.itemIcon(x, b.type), 20) + '</span>' +
-      '<div class="bk-title"><strong>' + OT.esc(b.title) + '</strong><span class="xs muted">' + OT.esc(b.provider || '') + ' · ' + keep(b.ref) + '</span></div>' +
+      '<div class="bk-title"><strong>' + OT.esc(b.title) + '</strong><span class="xs muted">' + (b.leg ? '<span class="lbl' + (b.leg === 'return' ? ' lbl-ret' : '') + '" data-leg="' + b.leg + '">' + OT.esc(b.leg === 'return' ? t('ret.retLbl', 'Return') : t('ret.outLbl', 'Outward')) + '</span> ' : '') + OT.esc(b.provider || '') + ' · ' + keep(b.ref) + '</span></div>' +
       '<div class="bk-amt">' + keep(OT.inr(b.amount)) + OT.badge(st) + (tk && st === 'confirmed' && tk.status !== 'CNF' ? OT.badge('pending', tk.passengers[0].status + ' · ' + t('trn.chance', '{p}% chance', { p: tk.chance })) : '') + '</div></div>' +
       (tk ? '<p class="small bk-tk">' + OT.icon('train', 14) + ' PNR ' + keep(tk.pnr) + ' · ' + keep(tk.from) + ' ' + keep(tk.dep) + ' → ' + keep(tk.to) + ' ' + keep(tk.arr) + ' · ' + keep(tk.cls) + ' · ' +
         OT.esc(t('ps.partyN', '{n} traveller(s)', { n: tk.passengers.length })) + ' · <a href="#/trains/ticket?pnr=' + tk.pnr + '">' + OT.esc(t('bk.eticket', 'View e-ticket')) + '</a></p>' : '') +
@@ -144,6 +144,8 @@
       OT.store.update('journey', function (j) {
         if (j && j.items) j.items.forEach(function (i) { if (i.id === b.itemId) i.status = 'cancelled'; });
         if (j && b.type === 'train' && j.pnr && j.pnr === b.pnr) j.train.status = 'CANCELLED';
+        // v1.2.1: the return train is cancelled on its own; the outward PNR and the rest of the trip stay as they are
+        if (j && b.type === 'train' && j.returnTrain && j.returnTrain.pnr === b.pnr) j.returnTrain.status = 'CANCELLED';
         return j;
       });
       if (amt == null) OT.agents.createTicket({ category: 'refund', subject: 'Refund review: policy missing', bookingRef: ref, source: 'bookings' });

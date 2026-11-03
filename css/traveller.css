@@ -1046,3 +1046,49 @@ body.ps-open { overflow: hidden; }
 .wa-fine { margin: 0; }
 /* dialogs opened from the payment pop-up (email, WhatsApp number) must sit above it */
 body.ps-open .modal-root { z-index: 106; }
+
+/* ---------------- v1.2.1: One way | Round trip, return train, pay-on-meter autos ---------------- */
+.step-row { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.step-row .step-label { margin: 0; }
+.trip-type { display: inline-flex; padding: 3px; gap: 2px; background: var(--blue-50); border: 1px solid var(--blue-100); border-radius: 999px; max-width: 100%; }
+.trn-form > .trip-type { margin-bottom: 10px; }
+.tt-opt { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; color: var(--ink-2); font: inherit; font-size: .86rem; font-weight: 600; padding: 6px 14px; border-radius: 999px; cursor: pointer; min-height: 32px; white-space: nowrap; }
+.tt-opt[aria-checked="true"] { background: var(--navy); color: var(--white); box-shadow: 0 1px 2px rgba(11, 44, 95, .25); }
+.tt-opt:not([aria-checked="true"]):hover { color: var(--navy); }
+.date-pair { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; min-width: 0; }
+.date-pair.is-round { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.date-pair .dp-cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.date-pair .dp-cell[hidden] { display: none; }
+.date-pair .input { min-width: 0; width: 100%; }
+.trn-form .trn-form-grid > .date-pair.is-round { min-width: 0; }
+.ret-out { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 12px 14px; margin-bottom: 14px; border-left: 4px solid var(--ok); }
+.ret-out > .ic { color: var(--ok); }
+.ret-out > div { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
+.ret-out strong { color: var(--navy); }
+.pp-chip.pp-ret { background: var(--saffron-50); border-color: #F5D2AE; color: var(--saffron-700); }
+.trn-sum-ret { border-top: 3px solid var(--saffron); }
+.trn-sum-ret > .xs { display: flex; align-items: center; gap: 4px; }
+.fare-legs > div > span { min-width: 0; }
+.ret-ticket { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 8px 12px; border: 1px dashed var(--saffron); border-radius: 10px; background: var(--saffron-50); }
+.ret-ticket strong { color: var(--navy); }
+.ret-ticket .badge { vertical-align: middle; }
+.lbl-ret { background: var(--saffron-50); color: var(--saffron-700); border-color: #F5D2AE; }
+.tl-addreturn .tl-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.tx-price-meter bdi { font-size: 1.15rem; }
+.tx-meter { margin: 0; display: flex; gap: 6px; align-items: flex-start; color: var(--ink-2); background: var(--blue-50); border-radius: 8px; padding: 6px 8px; }
+.tx-meter .ic { flex: none; margin-top: 2px; color: var(--blue-600); }
+.offer .tx-meter { margin: 8px 0; }
+.co-meter { display: flex; gap: 6px; align-items: flex-start; margin: 8px 0 0; }
+.it-train.it-ret { background: var(--saffron-50); }
+.it-train.it-ret .it-pnr { color: var(--saffron-700); }
+.it-meter { display: flex; gap: 6px; align-items: center; }
+@media (max-width: 480px) {
+  .tt-opt { padding: 6px 10px; font-size: .82rem; }
+  .ret-out { grid-template-columns: 24px minmax(0, 1fr); }
+  .ret-out > .btn { grid-column: 1 / -1; justify-self: start; }
+}
+.tf-grid2 > .date-pair.is-round { grid-column: 1 / -1; }
+.tf-grid2:has(> .date-pair.is-round) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+@media (min-width: 1101px) { .trn-form .trn-form-grid:has(> .date-pair.is-round) { grid-template-columns: minmax(0, 1fr) 40px minmax(0, 1fr) minmax(0, 1.9fr) minmax(0, .8fr) minmax(0, .5fr) auto; } }
+@media (max-width: 1100px) { .trn-form .trn-form-grid > .date-pair.is-round { grid-column: 1 / -1; } }
+#trn-pay { white-space: normal; height: auto; min-height: 48px; line-height: 1.25; text-align: center; }
