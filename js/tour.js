@@ -130,7 +130,7 @@
         if (view('checkout').pay) view('checkout').pay();
         return waitFor(function () { return document.querySelector('.modal-backdrop.show .modal'); }, 3000);
       } },
-    { title: 'Paid, plus a one-page itinerary', text: 'Booking references and a simulated UPI reference are issued and partner P-101 is notified. “Your one-page itinerary” gives an A4 PDF (print view), a PNG drawn on a canvas, and WhatsApp or email sending, each behind DPDP consent and a confirm step.',
+    { title: 'Paid, plus a one-page itinerary', text: 'Booking references and a simulated UPI reference are issued and partner P-101 is notified. “Your one-page itinerary” gives an A4 PDF (print view), a PNG drawn on a canvas, one-tap WhatsApp (opens the chat for the signed-in traveller\u2019s number with the itinerary already typed) and email.',
       target: [function () { return window.innerWidth >= 1000 ? document.querySelector('.ps-overlay.show .ps-card') : null; }, '[data-tour="itin-snapshot"]', '.ps-card'], enter: function () {
         clickPrimaryInModal();
         return waitFor(function () { return document.querySelector('.ps-overlay.show [data-tour="itin-snapshot"]'); }, 6000);

@@ -14,27 +14,27 @@
   var R = function () { return OT.data.rail; }, T = function () { return OT.data.travel; };
 
   var personas = [
-    { id: 'sunita', role: 'traveller', waSample: '9000000210', name: 'Sunita Sharma', short: 'Sunita', email: 'sunita.sharma@demo.onetrip', phone: '+91 98XXX XX210', lang: 'hi', homeCity: 'NDLS',
+    { id: 'sunita', role: 'traveller', waSample: '7589802655', name: 'Sunita Sharma', short: 'Sunita', email: 'sunita.sharma@demo.onetrip', phone: '+91 75898 02655', lang: 'hi', homeCity: 'NDLS',
       segKey: 'persona.sunita.seg', seg: 'Family traveller · Hindi', trips: 'Delhi ↔ Chandigarh / Shimla, Jaipur, Haridwar', cls: 'CC', budget: 3000, kind: 'family',
       prefs: { veg: true, family: true, nearStation: true, freeCancel: true },
       party: [{ name: 'Sunita Sharma', age: 42, gender: 'F', pref: 'W' }, { name: 'Rajesh Sharma', age: 45, gender: 'M', pref: 'A' }, { name: 'Diya Sharma', age: 11, gender: 'F', pref: 'W' }],
       consents: { personalised: true }, history: [['NDLS', 'CDG', '2026-03-14', '12011', 'CC', 2745], ['NDLS', 'JP', '2025-10-03', '12985', 'CC', 2460], ['NDLS', 'HW', '2025-06-07', '12017', 'CC', 2205]] },
-    { id: 'ramesh', role: 'traveller', waSample: '9000000377', name: 'Ramesh Iyer', short: 'Ramesh', email: 'ramesh.iyer@demo.onetrip', phone: '+91 94XXX XX377', lang: 'ta', homeCity: 'MAS',
+    { id: 'ramesh', role: 'traveller', waSample: '7589802655', name: 'Ramesh Iyer', short: 'Ramesh', email: 'ramesh.iyer@demo.onetrip', phone: '+91 75898 02655', lang: 'ta', homeCity: 'MAS',
       segKey: 'persona.ramesh.seg', seg: 'Once-a-year pilgrim with elderly parents · Tamil', trips: 'Chennai → Madurai, Varanasi, Tirupati', cls: '3A', budget: 2000, kind: 'pilgrim',
       prefs: { veg: true, temple: true, nearStation: true, senior: true },
       party: [{ name: 'Ramesh Iyer', age: 48, gender: 'M', pref: 'UB' }, { name: 'Lakshmi Iyer', age: 74, gender: 'F', pref: 'LB' }, { name: 'Venkatesh Iyer', age: 78, gender: 'M', pref: 'LB' }],
       consents: { personalised: true }, history: [['MS', 'MDU', '2026-01-14', '12637', '3A', 3315], ['MAS', 'BSB', '2025-11-02', '12669', '3A', 7650]] },
-    { id: 'arjun', role: 'traveller', waSample: '9000000642', name: 'Arjun Deshmukh', short: 'Arjun', email: 'arjun.d@demo.onetrip', phone: '+91 90XXX XX642', lang: 'mr', homeCity: 'PUNE',
+    { id: 'arjun', role: 'traveller', waSample: '7589802655', name: 'Arjun Deshmukh', short: 'Arjun', email: 'arjun.d@demo.onetrip', phone: '+91 75898 02655', lang: 'mr', homeCity: 'PUNE',
       segKey: 'persona.arjun.seg', seg: 'Student · Pune → home (Nagpur) a few times a year · Marathi', trips: 'Pune ↔ Nagpur, weekend trips to Goa', cls: 'SL', budget: 1200, kind: 'student',
       prefs: { budget: true, hostel: true }, party: [{ name: 'Arjun Deshmukh', age: 21, gender: 'M', pref: 'UB' }],
       consents: { personalised: true }, history: [['PUNE', 'NGP', '2026-08-28', '12135', 'SL', 545], ['PUNE', 'MAO', '2026-02-20', '22149', 'SL', 395]] },
-    { id: 'neha', role: 'traveller', waSample: '9000000908', name: 'Neha Kulkarni', short: 'Neha', email: 'neha.k@demo.onetrip', phone: '+91 99XXX XX908', lang: 'en', homeCity: 'CSMT',
+    { id: 'neha', role: 'traveller', waSample: '7589802655', name: 'Neha Kulkarni', short: 'Neha', email: 'neha.k@demo.onetrip', phone: '+91 75898 02655', lang: 'en', homeCity: 'CSMT',
       segKey: 'persona.neha.seg', seg: 'Frequent business traveller · English', trips: 'Mumbai ↔ Pune, Ahmedabad, Bengaluru', cls: 'CC', budget: 5000, kind: 'business',
       prefs: { nearStation: true, freeCancel: true, quick: true }, party: [{ name: 'Neha Kulkarni', age: 34, gender: 'F', pref: 'W' }],
       consents: { personalised: false }, history: [['CSMT', 'PUNE', '2026-10-12', '12123', 'CC', 520], ['BCT', 'ADI', '2026-09-03', '12009', 'CC', 1180], ['CSMT', 'SBC', '2026-07-21', '11301', '2A', 2690]] },
-    { id: 'partner', role: 'partner', name: 'Rajinder Singh', short: 'Rajinder', email: 'p101.shivalik@demo.onetrip', phone: '+91 97XXX XX101', lang: 'en', partnerId: 'P-101', org: 'Hotel Shivalik View',
+    { id: 'partner', role: 'partner', name: 'Rajinder Singh', short: 'Rajinder', email: 'p101.shivalik@demo.onetrip', phone: '+91 75898 02655', lang: 'en', partnerId: 'P-101', org: 'Hotel Shivalik View',
       segKey: 'persona.partner.seg', seg: 'Tourism partner · Hotel Shivalik View (P-101), Chandigarh' },
-    { id: 'admin', role: 'admin', name: 'Ananya Rao', short: 'Ananya', email: 'admin@demo.onetrip', phone: '+91 96XXX XX001', lang: 'en', org: 'IRCTC OneTrip Admin · Partner Bank (sample)',
+    { id: 'admin', role: 'admin', name: 'Ananya Rao', short: 'Ananya', email: 'admin@demo.onetrip', phone: '+91 75898 02655', lang: 'en', org: 'IRCTC OneTrip Admin · Partner Bank (sample)',
       segKey: 'persona.admin.seg', seg: 'IRCTC operations & Partner Bank analyst' }
   ];
   function byId(id) { return personas.filter(function (p) { return p.id === id; })[0] || null; }

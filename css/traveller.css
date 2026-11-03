@@ -1028,3 +1028,21 @@ body.ps-open { overflow: hidden; }
   body.touring.ps-open .tour-card.tour-mobile .tour-bar { display: none; }
   body.touring .ps-overlay { padding-bottom: 210px; }
 }
+
+/* v1.2.1 WhatsApp: direct open + compact number prompt (only when no number is known) */
+.wa-to { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 8px 0 0; }
+.wa-to .ic { color: #1FA855; }
+.wa-to .btn-link { font-size: inherit; }
+.wa-ask { display: grid; gap: 10px; }
+.wa-ask-head { display: flex; gap: 12px; align-items: flex-start; }
+.wa-ask-head p { margin: 2px 0 0; }
+.wa-ask-ic { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: #E7F8EE; color: #1FA855; }
+.wa-lbl { font-weight: 600; font-size: .9rem; margin-top: 4px; }
+.wa-phone { display: flex; align-items: stretch; border: 1.5px solid var(--line, #D5DEEC); border-radius: 12px; overflow: hidden; background: var(--white, #fff); transition: border-color .15s, box-shadow .15s; }
+.wa-phone:focus-within { border-color: #1FA855; box-shadow: 0 0 0 3px rgba(31, 168, 85, .18); }
+.wa-cc { display: flex; align-items: center; padding: 0 12px; font-weight: 700; color: var(--navy, #0B2C5F); background: #F3F6FB; border-right: 1px solid var(--line, #D5DEEC); }
+.wa-phone input { flex: 1; min-width: 0; border: 0; outline: 0; padding: 12px 14px; font: inherit; font-size: 1.1rem; letter-spacing: .04em; background: transparent; color: inherit; }
+.wa-remember { align-items: flex-start; }
+.wa-fine { margin: 0; }
+/* dialogs opened from the payment pop-up (email, WhatsApp number) must sit above it */
+body.ps-open .modal-root { z-index: 106; }

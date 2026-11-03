@@ -1,7 +1,7 @@
 /* IRCTC OneTrip — one-page itinerary snapshot (v1.2). SIMULATED.
  *   #/itinerary-print[?print=1]   print-optimised single A4 page (Download PDF = window.print → "Save as PDF")
  *   OT.itinerary.png()            -> PNG data URL drawn on a <canvas> by hand (no libraries), downloaded / shared
- *   OT.itinerary.whatsApp()       -> consent + confirm, then opens https://wa.me/91XXXXXXXXXX?text=… and downloads the PNG
+ *   OT.itinerary.whatsApp()       -> opens https://wa.me/91XXXXXXXXXX?text=… directly with the signed-in user's number (asks once if none)
  *   OT.itinerary.email()          -> consent + confirm, mailto: link + "Sent to … (simulated)" + admin notification log
  * The code drawn on the page is a simulated QR-style pattern (not scannable). A production system would send through
  * the WhatsApp Business API and a transactional mail service; this prototype says so on screen.
@@ -106,7 +106,7 @@
       '<div class="row-wrap"><button type="button" class="btn btn-primary btn-sm" data-it="print">' + OT.icon('printer', 15) + OT.esc(t('it.pdf', 'Download PDF')) + '</button>' +
       '<button type="button" class="btn btn-ghost btn-sm" data-it="png">' + OT.icon('image', 15) + OT.esc(t('it.png', 'Save PNG')) + '</button>' +
       '<button type="button" class="btn btn-ghost btn-sm" data-it="wa">' + OT.icon('whatsapp', 15) + OT.esc(t('it.wa', 'WhatsApp')) + '</button>' +
-      '<button type="button" class="btn btn-ghost btn-sm" data-it="mail">' + OT.icon('mail', 15) + OT.esc(t('it.mail', 'Email')) + '</button></div>' +
+      '<button type="button" class="btn btn-ghost btn-sm" data-it="mail">' + OT.icon('mail', 15) + OT.esc(t('it.mail', 'Email')) + '</button></div>' + waNoteHTML() +
       '<p class="xs muted it-pdfhint">' + OT.esc(t('it.pdfHint', 'Download PDF opens your browser’s print dialog: choose “Save as PDF”. The page is sized for one A4 sheet.')) + '</p></div>';
   }
 
@@ -229,9 +229,21 @@
   }
   function waUrl(digits, text) { return 'https://wa.me/91' + String(digits).replace(/\D/g, '').slice(-10) + '?text=' + encodeURIComponent(text); }
   function mailtoUrl(email, subject, body) { return 'mailto:' + encodeURIComponent(email).replace(/%40/g, '@') + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body); }
-  function sampleMobile() {
+  /* The signed-in user's own mobile (profile phone, a number saved earlier, or the demo persona's dummy number). '' if none. */
+  function clean10(v) {
+    var d = String(v || '').replace(/\D/g, '');
+    if (d.length === 12 && d.slice(0, 2) === '91') d = d.slice(2); else if (d.length === 11 && d[0] === '0') d = d.slice(1);
+    return /^[6-9]\d{9}$/.test(d) ? d : '';
+  }
+  function userMobile() {
     var u = OT.store.get('user') || {}, p = u.personaId && OT.data.personas && OT.data.personas.get(u.personaId);
-    return (p && p.waSample) || u.mobile || '';
+    return clean10(u.mobile) || clean10(u.phone) || clean10(p && p.waSample) || clean10(OT.store.get('waMobile'));
+  }
+  function sampleMobile() { return userMobile(); }
+  function fmt(d) { d = String(d); return '+91 ' + d.slice(0, 5) + ' ' + d.slice(5); }
+  function rememberMobile(d) {
+    var u = OT.store.get('user');
+    if (u) OT.store.set('user', Object.assign({}, u, { mobile: d })); else OT.store.set('waMobile', d);
   }
   function mask(d) { d = String(d); return '+91 ' + d.slice(0, 2) + 'XXX XX' + d.slice(-3); }
   function maskMail(e) { var p = String(e).split('@'); return p[0].slice(0, 2) + '…@' + (p[1] || ''); }
@@ -268,34 +280,69 @@
     });
   }
 
-  function whatsApp() {
-    var m = model(); if (!m) return Promise.resolve(null);
-    return askContact('wa').then(function (num) {
-      if (!num) return null;
-      var text = summaryText(m), url = waUrl(num, text);
-      return OT.confirmAction({
-        title: t('it.waConfirm', 'Send to WhatsApp?'),
-        lines: [OT.esc(t('it.to', 'To')) + ': ' + keep(mask(num)), OT.esc(t('it.what', 'What')) + ': ' + OT.esc(t('it.whatText', 'One-page itinerary summary, {n} item(s), booking refs', { n: m.rows.length })),
-          OT.esc(t('it.how', 'How')) + ': ' + OT.esc(t('it.howWa', 'opens wa.me in a new tab + downloads the PNG to attach'))],
-        note: OT.esc(t('it.waHonest', 'Prototype: we open WhatsApp (wa.me) with the summary and download the PNG for you to attach. A production system would send it through the WhatsApp Business API.')),
-        confirmLabel: t('it.waOk', 'Open WhatsApp')
-      }).then(function (ok) {
-        if (!ok) return null;
-        OT.state.lastShare = { channel: 'whatsapp', url: url, to: num };
-        try { window.open(url, '_blank', 'noopener'); } catch (e) { /* popup blocked: link below */ }
-        savePng(true);
-        log({ channel: 'whatsapp', to: mask(num), journeyId: m.id, refs: m.refs, items: m.rows.length });
-        OT.modal({
-          title: t('it.waDone', 'WhatsApp opened (simulated send)'),
-          body: '<p class="small">' + OT.esc(t('it.waDoneText', 'We opened WhatsApp with your itinerary summary for {to} and downloaded the PNG. Attach it in the chat and press send.', { to: mask(num) })) + '</p>' +
-            '<p><a class="btn btn-ghost btn-sm" id="wa-link" href="' + OT.esc(url) + '" target="_blank" rel="noopener">' + OT.icon('whatsapp', 15) + OT.esc(t('it.waAgain', 'Open WhatsApp again')) + '</a></p>' +
-            '<p class="xs muted">' + OT.esc(t('it.waHonest', 'Prototype: we open WhatsApp (wa.me) with the summary and download the PNG for you to attach. A production system would send it through the WhatsApp Business API.')) + '</p>',
-          actions: [{ label: t('common.close', 'Close'), kind: 'primary' }]
-        });
-        return url;
-      });
-    });
+  /* Opens WhatsApp straight away (wa.me deep link, like Canva's "Share to WhatsApp"): the chat with this number opens
+   * with the itinerary text already typed; the traveller only taps Send. Called synchronously from the click so the
+   * browser treats it as a user action and does not block the new tab. */
+  function openWa(num, m) {
+    var url = waUrl(num, summaryText(m));
+    OT.state.lastShare = { channel: 'whatsapp', url: url, to: num };
+    try { window.open(url, '_blank', 'noopener'); } catch (e) { location.href = url; }
+    log({ channel: 'whatsapp', to: mask(num), journeyId: m.id, refs: m.refs, items: m.rows.length });
+    OT.toast(t('it.waOpened', 'Opening WhatsApp for {to} with your itinerary. Tap Send there.', { to: fmt(num) }), 'success');
+    OT.emit('itinerary:wa', { url: url, to: num });
+    return url;
   }
+  function askWa(m) {
+    var done = false;
+    OT.modal({
+      title: t('it.waTitle', 'Send itinerary to WhatsApp'),
+      body: '<div class="wa-ask">' +
+        '<div class="wa-ask-head"><span class="wa-ask-ic" aria-hidden="true">' + OT.icon('whatsapp', 22) + '</span><div><strong>' + OT.esc(t('it.waWhere', 'Which WhatsApp number?')) + '</strong>' +
+        '<p class="xs muted">' + OT.esc(t('it.waWhereSub', 'WhatsApp opens with your itinerary already typed. You just tap Send.')) + '</p></div></div>' +
+        '<label class="wa-lbl" for="sh-to">' + OT.esc(t('it.mobile', 'Mobile number (India)')) + '</label>' +
+        '<div class="wa-phone"><span class="wa-cc">+91</span><input id="sh-to" class="mono-num" type="tel" inputmode="numeric" maxlength="16" autocomplete="tel-national" placeholder="98765 43210"></div>' +
+        '<label class="check wa-remember"><input type="checkbox" id="sh-remember" checked> <span class="small">' + OT.esc(t('it.waRemember', 'Save this number to my profile, so next time WhatsApp opens directly')) + '</span></label>' +
+        '<p class="small form-error hidden" id="sh-err" role="alert"></p>' +
+        '<p class="xs muted wa-fine">' + OT.icon('info', 12) + ' ' + OT.esc(t('it.waFine', 'By continuing you agree to share this itinerary with this number (DPDP Act). Prototype: in production OneTrip would send it via the WhatsApp Business API.')) + '</p></div>',
+      onOpen: function (box) {
+        var inp = (box && box.querySelector('#sh-to')) || document.getElementById('sh-to'); if (!inp) return;
+        setTimeout(function () { inp.focus(); }, 30);
+        inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); var root = inp.closest('.modal') || document, b = OT.$$('.modal-foot .btn', root); if (b.length) b[b.length - 1].click(); } });
+      },
+      onClose: function () { done = true; },
+      actions: [
+        { label: t('common.cancel', 'Cancel'), kind: 'ghost', onClick: function (c) { done = true; c(); } },
+        { label: t('it.waOk', 'Open WhatsApp'), kind: 'primary', onClick: function (c) {
+          var v = clean10(document.getElementById('sh-to').value), err = document.getElementById('sh-err');
+          if (!v) { err.textContent = t('it.badMobile', 'Enter a 10-digit Indian mobile number.'); err.classList.remove('hidden'); return; }
+          if (document.getElementById('sh-remember').checked) rememberMobile(v);
+          done = true; c(); openWa(v, m); refreshWaNotes();
+        } }
+      ]
+    });
+    return Promise.resolve(null);
+  }
+  /** WhatsApp: opens directly with the signed-in user's number; asks only when no number is known (or to change it). */
+  function whatsApp(opts) {
+    var m = model(); if (!m) return Promise.resolve(null);
+    var num = opts && opts.ask ? '' : userMobile();
+    if (num) return Promise.resolve(openWa(num, m));
+    return askWa(m);
+  }
+  /* Small line under the share buttons: "WhatsApp to +91 75898 02655 · Change". */
+  function waNoteHTML() {
+    var n = userMobile();
+    return '<p class="xs muted wa-to" data-wa-note>' + (n
+      ? OT.icon('whatsapp', 12) + ' ' + OT.esc(t('it.waTo', 'WhatsApp opens for')) + ' <bdi class="keep">' + OT.esc(fmt(n)) + '</bdi> · <button type="button" class="btn-link" data-wa-change>' + OT.esc(t('it.waChange', 'Change number')) + '</button>'
+      : '') + '</p>';
+  }
+  function refreshWaNotes() { OT.$$('[data-wa-note]').forEach(function (el) { el.outerHTML = waNoteHTML(); }); }
+  document.addEventListener('click', function (e) {
+    var b = e.target && e.target.closest && e.target.closest('[data-wa-change]');
+    if (b) { e.preventDefault(); whatsApp({ ask: true }); }
+  });
+  OT.on('store:user', function () { refreshWaNotes(); });
+
   function email() {
     var m = model(); if (!m) return Promise.resolve(null);
     return askContact('mail').then(function (addr) {
@@ -339,7 +386,7 @@
       '<button type="button" class="btn btn-ghost btn-sm" data-it="pdf">' + OT.icon('printer', 15) + OT.esc(t('it.pdf', 'Download PDF')) + '</button>' +
       '<button type="button" class="btn btn-ghost btn-sm" data-it="png">' + OT.icon('image', 15) + OT.esc(t('it.png', 'Save PNG')) + '</button>' +
       '<button type="button" class="btn btn-ghost btn-sm" data-it="wa">' + OT.icon('whatsapp', 15) + OT.esc(t('it.wa', 'WhatsApp')) + '</button>' +
-      '<button type="button" class="btn btn-ghost btn-sm" data-it="mail">' + OT.icon('mail', 15) + OT.esc(t('it.mail', 'Email')) + '</button></div></div>';
+      '<button type="button" class="btn btn-ghost btn-sm" data-it="mail">' + OT.icon('mail', 15) + OT.esc(t('it.mail', 'Email')) + '</button></div>' + waNoteHTML() + '</div>';
   }
   function bindCard(scope) { OT.$$('.itin-card [data-it]', scope).forEach(function (b) { b.addEventListener('click', function () { action(b.getAttribute('data-it')); }); }); }
 
@@ -349,5 +396,5 @@
     render: render
   });
   OT.itinerary = { model: model, sheetHTML: sheetHTML, png: png, savePng: savePng, whatsApp: whatsApp, email: email, action: action, waUrl: waUrl, mailtoUrl: mailtoUrl,
-    summaryText: summaryText, qr: qr, qrSVG: qrSVG, cardHTML: cardHTML, bindCard: bindCard };
+    summaryText: summaryText, userMobile: userMobile, waNoteHTML: waNoteHTML, qr: qr, qrSVG: qrSVG, cardHTML: cardHTML, bindCard: bindCard };
 })();

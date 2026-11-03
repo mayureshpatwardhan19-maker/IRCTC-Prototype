@@ -8,11 +8,11 @@
 
   var ROLES = {
     traveller: { icon: 'user', key: 'auth.traveller', en: 'Traveller', dkey: 'auth.travellerD', den: 'Plan and manage your journey',
-      demo: { name: 'Sunita Sharma', email: 'sunita.sharma@demo.onetrip', phone: '+91 98XXX XX210' }, home: 'journey' },
+      demo: { name: 'Sunita Sharma', email: 'sunita.sharma@demo.onetrip', phone: '+91 75898 02655' }, home: 'journey' },
     partner: { icon: 'store', key: 'auth.partner', en: 'Tourism Partner', dkey: 'auth.partnerD', den: 'Hotel Shivalik View (P-101)',
-      demo: { name: 'Rajinder Singh', email: 'p101.shivalik@demo.onetrip', phone: '+91 97XXX XX101', partnerId: 'P-101', org: 'Hotel Shivalik View' }, home: 'partner' },
+      demo: { name: 'Rajinder Singh', email: 'p101.shivalik@demo.onetrip', phone: '+91 75898 02655', partnerId: 'P-101', org: 'Hotel Shivalik View' }, home: 'partner' },
     admin: { icon: 'bank', key: 'auth.admin', en: 'Admin & Bank', dkey: 'auth.adminD', den: 'IRCTC operations · Partner Bank (sample)',
-      demo: { name: 'Ananya Rao', email: 'admin@demo.onetrip', phone: '+91 96XXX XX001', org: 'IRCTC OneTrip Admin · Partner Bank (sample)' }, home: 'admin' }
+      demo: { name: 'Ananya Rao', email: 'admin@demo.onetrip', phone: '+91 75898 02655', org: 'IRCTC OneTrip Admin · Partner Bank (sample)' }, home: 'admin' }
   };
   var role = 'traveller';
 

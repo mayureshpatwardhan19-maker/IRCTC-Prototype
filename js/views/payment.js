@@ -71,7 +71,7 @@
       '<button type="button" class="btn btn-ghost btn-sm" data-it="pdf">' + OT.icon('printer', 15) + OT.esc(t('it.pdf', 'Download PDF')) + '</button>' +
       '<button type="button" class="btn btn-ghost btn-sm" data-it="png">' + OT.icon('image', 15) + OT.esc(t('it.png', 'Save PNG')) + '</button>' +
       '<button type="button" class="btn btn-ghost btn-sm" data-it="wa">' + OT.icon('whatsapp', 15) + OT.esc(t('it.wa', 'WhatsApp')) + '</button>' +
-      '<button type="button" class="btn btn-ghost btn-sm" data-it="mail">' + OT.icon('mail', 15) + OT.esc(t('it.mail', 'Email')) + '</button></div></div>' +
+      '<button type="button" class="btn btn-ghost btn-sm" data-it="mail">' + OT.icon('mail', 15) + OT.esc(t('it.mail', 'Email')) + '</button></div>' + (OT.itinerary ? OT.itinerary.waNoteHTML() : '') + '</div>' +
       '<p class="xs muted ps-sim">' + OT.esc(t('ps2.sim', 'Simulated payment for an academic demo. No money moved.')) + '</p></div>';
     var tr = document.getElementById('toast-root'); if (tr) tr.innerHTML = '';
     document.body.appendChild(el);
